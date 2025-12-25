@@ -1,223 +1,268 @@
 #!/usr/bin/env python3
+
 """
-SkySwitcher
-Key-buffer based layout switcher with Time-based reset.
-
-Changes in v0.3.3:
-- Refactored into modular OOP architecture (DeviceManager, SkySwitcher).
-- Restored strict device detection (checking EV_KEY & specific keys A, Z, Space).
-- Removed all automatic triggers (manual control focus).
-- Finalized 'Lazy Reset' logic for optimal performance.
-
+SkySwitcher v0.3.8
+Back to basics:
+- Removed forced SUDO check (lets the OS handle permissions).
+- Removed complex Wayland environment hacks (not needed without sudo).
+- Fixed variable shadowing bugs.
+- Kept the robust DeviceManager from v0.3.x.
 """
 
 import sys
-import os
 import time
 import logging
-from typing import Optional, List, Set
-from evdev import InputDevice, ecodes, list_devices
+import subprocess
+from evdev import InputDevice, UInput, ecodes as e, list_devices
 
 # --- Configuration ---
-VERSION = "0.3.3"
-TIMEOUT_SECONDS = 3.0  # Reset buffer only if typing resumes after this gap
-LOG_LEVEL = logging.DEBUG
+VERSION = "0.3.8"
+DOUBLE_PRESS_DELAY = 0.5
+LAYOUT_SWITCH_COMBO = [e.KEY_LEFTMETA, e.KEY_SPACE]
+
 
 # --- Logging Setup ---
-logging.basicConfig(
-    level=LOG_LEVEL,
-    format='[%(asctime)s] %(message)s',
-    datefmt='%H:%M:%S',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-# Create a specific logger for our app
+class EmojiFormatter(logging.Formatter):
+    def format(self, record):
+        log_time = time.strftime("%H:%M:%S", time.localtime(record.created))
+        return f"[{log_time}] {record.getMessage()}"
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(EmojiFormatter())
 logger = logging.getLogger("SkySwitcher")
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
+
+# --- Layout Database ---
+LAYOUT_US = "`qwertyuiop[]\\asdfghjkl;'zxcvbnm,./~@#$%^&QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>?"
+LAYOUT_UA = "'йцукенгшщзхїґфівапролджєячсмитьбю.₴\"№;%:?ЙЦУКЕНГШЩЗХЇҐФІВАПРОЛДЖЄЯЧСМИТЬБЮ,"
+LAYOUTS_DB = {
+    'us': LAYOUT_US,
+    'ua': LAYOUT_UA,
+}
 
 
 class DeviceManager:
-    """
-    Manages input device connection using capability detection.
-    Robust against virtual devices, mice, and webcams.
-    """
-
     IGNORED_KEYWORDS = [
         'mouse', 'webcam', 'audio', 'video', 'consumer',
         'control', 'headset', 'receiver', 'solaar', 'hotkeys',
         'button', 'switch', 'hda', 'dock'
     ]
-
-    # Essential keys for a typing keyboard (A, Z, Space, Enter)
-    REQUIRED_KEYS = {
-        ecodes.KEY_SPACE, ecodes.KEY_ENTER,
-        ecodes.KEY_A, ecodes.KEY_Z
-    }
+    REQUIRED_KEYS = {e.KEY_SPACE, e.KEY_ENTER, e.KEY_A, e.KEY_Z}
 
     @staticmethod
     def find_keyboard() -> InputDevice:
-        """
-        Scans input devices and returns the best candidate for a keyboard.
-        """
-        logger.info("🔍 Scanning for keyboards...")
+        devices = []
 
-        # Sort by path for deterministic behavior
-        devices = [InputDevice(path) for path in list_devices()]
+        try:
+            devices = [InputDevice(path) for path in list_devices()]
+        except OSError:
+            logger.error(
+                "❌ Failed to list devices. Do you have permission? (Try adding user to 'input' group or use sudo)")
+            sys.exit(1)
+
         devices.sort(key=lambda x: x.path)
-
         possible_candidates = []
 
         for dev in devices:
             name_lower = dev.name.lower()
+            if any(bad in name_lower for bad in DeviceManager.IGNORED_KEYWORDS): continue
+            if e.EV_KEY not in dev.capabilities(): continue
 
-            # 1. Filter out non-keyboards by name
-            if any(bad in name_lower for bad in DeviceManager.IGNORED_KEYWORDS):
-                continue
-
-            # 2. Check capabilities (Must have EV_KEY)
-            caps = dev.capabilities()
-            if ecodes.EV_KEY not in caps:
-                continue
-
-            # 3. Check for specific keys
-            supported_keys = set(caps[ecodes.EV_KEY])
+            supported_keys = set(dev.capabilities()[e.EV_KEY])
             if DeviceManager.REQUIRED_KEYS.issubset(supported_keys):
-                # Priority 1: Explicitly named "keyboard"
                 if 'keyboard' in name_lower or 'kbd' in name_lower:
-                    logger.info(f"✅ Primary keyboard found: {dev.name} ({dev.path})")
+                    logger.info(f"✅ Connected to: {dev.name}")
                     return dev
-
-                # Priority 2: Fits criteria but generic name
                 possible_candidates.append(dev)
 
         if possible_candidates:
-            best_guess = possible_candidates[0]
-            logger.warning(f"⚠️  Ambiguous device name, but looks like a keyboard: {best_guess.name}")
-            return best_guess
+            logger.info(f"✅ Connected to: {possible_candidates[0].name}")
+            return possible_candidates[0]
 
-        logger.error("❌ No suitable keyboard found! Check permissions (sudo).")
+        logger.error("❌ No suitable keyboard found!")
         sys.exit(1)
 
 
-class CharacterMapper:
-    """
-    Maps hardware scancodes to simple characters for buffer tracking.
-    Note: This does not handle Shift state (Case), as we only track raw keys for correction logic.
-    """
-
+class TextProcessor:
     def __init__(self):
-        self.map = {
-            ecodes.KEY_A: 'a', ecodes.KEY_B: 'b', ecodes.KEY_C: 'c', ecodes.KEY_D: 'd',
-            ecodes.KEY_E: 'e', ecodes.KEY_F: 'f', ecodes.KEY_G: 'g', ecodes.KEY_H: 'h',
-            ecodes.KEY_I: 'i', ecodes.KEY_J: 'j', ecodes.KEY_K: 'k', ecodes.KEY_L: 'l',
-            ecodes.KEY_M: 'm', ecodes.KEY_N: 'n', ecodes.KEY_O: 'o', ecodes.KEY_P: 'p',
-            ecodes.KEY_Q: 'q', ecodes.KEY_R: 'r', ecodes.KEY_S: 's', ecodes.KEY_T: 't',
-            ecodes.KEY_U: 'u', ecodes.KEY_V: 'v', ecodes.KEY_W: 'w', ecodes.KEY_X: 'x',
-            ecodes.KEY_Y: 'y', ecodes.KEY_Z: 'z',
-            ecodes.KEY_1: '1', ecodes.KEY_2: '2', ecodes.KEY_3: '3', ecodes.KEY_4: '4',
-            ecodes.KEY_5: '5', ecodes.KEY_6: '6', ecodes.KEY_7: '7', ecodes.KEY_8: '8',
-            ecodes.KEY_9: '9', ecodes.KEY_0: '0',
-            ecodes.KEY_MINUS: '-', ecodes.KEY_EQUAL: '=',
-            ecodes.KEY_LEFTBRACE: '[', ecodes.KEY_RIGHTBRACE: ']',
-            ecodes.KEY_SEMICOLON: ';', ecodes.KEY_APOSTROPHE: "'",
-            ecodes.KEY_COMMA: ',', ecodes.KEY_DOT: '.', ecodes.KEY_SLASH: '/',
-            ecodes.KEY_GRAVE: '`', ecodes.KEY_BACKSLASH: '\\'
-        }
+        self.src_chars = LAYOUTS_DB['us']
+        self.dst_chars = LAYOUTS_DB['ua']
+        self.map_src_to_dst = str.maketrans(self.src_chars, self.dst_chars)
+        self.map_dst_to_src = str.maketrans(self.dst_chars, self.src_chars)
+        self.src_unique = set(self.src_chars) - set(self.dst_chars)
+        self.dst_unique = set(self.dst_chars) - set(self.src_chars)
+        logger.info(f"🌍 Languages: US <-> UA")
 
-    def get_char(self, scancode: int) -> Optional[str]:
-        return self.map.get(scancode)
+    def smart_translate(self, text):
+        src_score = sum(1 for c in text if c in self.src_unique)
+        dst_score = sum(1 for c in text if c in self.dst_unique)
+        if src_score >= dst_score:
+            return text.translate(self.map_src_to_dst)
+        return text.translate(self.map_dst_to_src)
 
 
 class SkySwitcher:
     def __init__(self):
         self.device = DeviceManager.find_keyboard()
-        self.mapper = CharacterMapper()
 
-        self.buffer = ""
-        self.last_key_time = time.time()
+        self.uinput_keys = [
+            e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_RIGHTCTRL, e.KEY_RIGHTSHIFT,
+            e.KEY_C, e.KEY_V, e.KEY_LEFT, e.KEY_RIGHT, e.KEY_BACKSPACE,
+            e.KEY_HOME, e.KEY_LEFTMETA, e.KEY_SPACE, e.KEY_LEFTALT
+        ]
 
-        # Track modifiers to ignore shortcuts (Ctrl+C, etc)
-        self.modifiers_state = {
-            k: False for k in [
-                ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
-                ecodes.KEY_LEFTALT, ecodes.KEY_RIGHTALT,
-                ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA
-            ]
-        }
+        self.ui = None
+        try:
+            self.ui = UInput({e.EV_KEY: self.uinput_keys}, name="SkySwitcher-Virtual")
+        except OSError:
+            logger.error("❌ Failed to create UInput device. Check permissions for /dev/uinput.")
+            sys.exit(1)
 
-    def _is_modifier_active(self) -> bool:
-        return any(self.modifiers_state.values())
+        self.processor = TextProcessor()
+        self.last_press_time = 0
+        self.modifier_down = False
 
-    def _handle_lazy_reset(self):
-        """
-        Checks if too much time has passed since the last keystroke.
-        If yes, clears the buffer BEFORE processing the new key.
-        """
-        current_time = time.time()
-        if (current_time - self.last_key_time) > TIMEOUT_SECONDS:
-            if self.buffer:
-                # Log only if we are discarding something, to avoid spam
-                logger.debug(f"⏳ Timeout ({TIMEOUT_SECONDS}s). Buffer cleared.")
-            self.buffer = ""
-        self.last_key_time = current_time
+        self.trigger_btn = e.KEY_RIGHTSHIFT
+        self.mode2_modifier = e.KEY_RIGHTCTRL
+
+    def send_combo(self, *keys):
+        for k in keys: self.ui.write(e.EV_KEY, k, 1)
+        self.ui.syn()
+        time.sleep(0.02)
+        for k in reversed(keys): self.ui.write(e.EV_KEY, k, 0)
+        self.ui.syn()
+        time.sleep(0.02)
+
+    def release_all_modifiers(self):
+        modifiers = [e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT, e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL, e.KEY_LEFTALT]
+        for key in modifiers:
+            self.ui.write(e.EV_KEY, key, 0)
+        self.ui.syn()
+        time.sleep(0.05)
+
+    def get_clipboard(self):
+        try:
+            return subprocess.run(['wl-paste', '-n'], capture_output=True, text=True).stdout
+        except:
+            return ""
+
+    def set_clipboard(self, text):
+        try:
+            p = subprocess.Popen(['wl-copy', '-n'], stdin=subprocess.PIPE, text=True)
+            p.communicate(input=text)
+        except:
+            pass
+
+    def wait_for_new_content(self, timeout=0.5):
+        start = time.time()
+        while time.time() - start < timeout:
+            content = self.get_clipboard()
+            if content: return content
+            time.sleep(0.02)
+        return None
+
+    def process_correction(self, mode="last_word"):
+        self.release_all_modifiers()
+        time.sleep(0.15)
+
+        backup_clipboard = self.get_clipboard()
+        subprocess.run(['wl-copy', '--clear'], check=False)
+
+        if mode == "last_word":
+            self.send_combo(e.KEY_LEFTSHIFT, e.KEY_HOME)
+            self.release_all_modifiers()
+            time.sleep(0.1)
+            self.send_combo(e.KEY_LEFTCTRL, e.KEY_C)
+        else:
+            self.send_combo(e.KEY_LEFTCTRL, e.KEY_C)
+
+        full_text = self.wait_for_new_content()
+
+        if not full_text:
+            logger.info("⚠️ Copy failed/empty.")
+            self.set_clipboard(backup_clipboard)
+            if mode == "last_word": self.send_combo(e.KEY_RIGHT)
+            return
+
+        target_text = full_text
+        if mode == "last_word":
+            if not full_text.strip():
+                self.set_clipboard(backup_clipboard)
+                self.send_combo(e.KEY_RIGHT)
+                return
+            target_text = full_text.split()[-1]
+
+        converted = self.processor.smart_translate(target_text)
+
+        if target_text == converted:
+            logger.info("No change needed.")
+            if mode == "last_word": self.send_combo(e.KEY_RIGHT)
+            return
+
+        logger.info(f"Correcting: '{target_text}' -> '{converted}'")
+        self.set_clipboard(converted)
+        time.sleep(0.1)
+
+        if mode == "last_word":
+            self.send_combo(e.KEY_RIGHT)
+            for _ in range(len(target_text)):
+                self.ui.write(e.EV_KEY, e.KEY_BACKSPACE, 1)
+                self.ui.syn()
+                time.sleep(0.005)
+                self.ui.write(e.EV_KEY, e.KEY_BACKSPACE, 0)
+                self.ui.syn()
+        else:
+            self.send_combo(e.KEY_BACKSPACE)
+
+        self.release_all_modifiers()
+        time.sleep(0.05)
+        self.send_combo(e.KEY_LEFTCTRL, e.KEY_V)
+
+        if mode == "last_word":
+            logger.info("Switching system layout...")
+            time.sleep(0.1)
+            self.send_combo(*LAYOUT_SWITCH_COMBO)
 
     def run(self):
-        logger.info(f"🚀 SkySwitcher {VERSION} running...")
+        logger.info(f"🚀 SkySwitcher v{VERSION} running...")
+
+        try:
+            self.device.grab()
+            self.device.ungrab()
+        except:
+            logger.warning("⚠️ Device grabbed. Running passive.")
 
         try:
             for event in self.device.read_loop():
-                if event.type == ecodes.EV_KEY:
-                    self.process_key_event(event)
+                if event.type == e.EV_KEY:
+
+                    if event.code == self.mode2_modifier:
+                        self.modifier_down = (event.value == 1 or event.value == 2)
+
+                    if event.code == self.trigger_btn:
+                        if event.value == 1:
+                            if self.modifier_down:
+                                logger.info("✨ Mode 2: Selection Fix")
+                                self.process_correction(mode="selection")
+                                self.last_press_time = 0
+                            else:
+                                now = time.time()
+                                if now - self.last_press_time < DOUBLE_PRESS_DELAY:
+                                    logger.info("⚡ Mode 1: Double Shift")
+                                    self.process_correction(mode="last_word")
+                                    self.last_press_time = 0
+                                else:
+                                    self.last_press_time = now
+
+                        elif event.value == 1 and event.code != self.mode2_modifier:
+                            if self.last_press_time > 0: self.last_press_time = 0
+
         except KeyboardInterrupt:
             logger.info("\n🛑 Stopped by user.")
-        except OSError as e:
-            logger.error(f"❌ Device error: {e}")
-
-    def process_key_event(self, event):
-        code = event.code
-        val = event.value
-
-        # 1. Update Modifiers State
-        if code in self.modifiers_state:
-            self.modifiers_state[code] = (val > 0)  # 1=Down, 2=Hold
-            return
-
-        # We only care about Key Down (1)
-        if val != 1:
-            return
-
-        # 2. Lazy Reset (Crucial fix for pauses)
-        self._handle_lazy_reset()
-
-        # 3. Handle Special Keys (Backspace, Space, etc.)
-        if code == ecodes.KEY_BACKSPACE:
-            self.buffer = self.buffer[:-1]
-            logger.info(f"🔙 BS. Buffer: [{self.buffer}]")
-            return
-
-        if code in [ecodes.KEY_SPACE, ecodes.KEY_ENTER, ecodes.KEY_TAB, ecodes.KEY_ESC]:
-            if self.buffer:
-                logger.info(f"⏹️ Word End: [{self.buffer}]")
-                self.buffer = ""  # Start fresh next time
-            return
-
-        # 4. Filter shortcuts
-        if self._is_modifier_active():
-            if self.buffer:
-                logger.info("🔒 Shortcut detected. Buffer cleared.")
-                self.buffer = ""
-            return
-
-        # 5. Add to Buffer
-        char = self.mapper.get_char(code)
-        if char:
-            self.buffer += char
-            # Log current state to verify logic
-            logger.info(f"🔤 Typed: '{char}' | Buffer: [{self.buffer}]")
+        except OSError as err:
+            logger.error(f"❌ Device error: {err}")
 
 
 if __name__ == "__main__":
-    if os.geteuid() != 0:
-        logger.warning("⚠️  Script requires root privileges to read input devices.")
-        logger.warning("   Run: sudo python3 main.py")
-
-    app = SkySwitcher()
-    app.run()
+    SkySwitcher().run()
