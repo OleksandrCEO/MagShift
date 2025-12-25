@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-
 """
-SkySwitcher v0.3.8
-Back to basics:
-- Removed forced SUDO check (lets the OS handle permissions).
-- Removed complex Wayland environment hacks (not needed without sudo).
-- Fixed variable shadowing bugs.
-- Kept the robust DeviceManager from v0.3.x.
+SkySwitcher v0.4.0
+Merged functionality:
+- Core Logic: Robust v0.3.8 architecture (Reliable clipboard, no sudo hacks).
+- CLI Features: Restored v0.2.1 arguments (--list, --device, --verbose).
 """
 
 import sys
 import time
 import logging
 import subprocess
+import argparse
 from evdev import InputDevice, UInput, ecodes as e, list_devices
 
 # --- Configuration ---
-VERSION = "0.3.8"
+VERSION = "0.4.0"
 DOUBLE_PRESS_DELAY = 0.5
 LAYOUT_SWITCH_COMBO = [e.KEY_LEFTMETA, e.KEY_SPACE]
 
@@ -27,11 +25,12 @@ class EmojiFormatter(logging.Formatter):
         log_time = time.strftime("%H:%M:%S", time.localtime(record.created))
         return f"[{log_time}] {record.getMessage()}"
 
+
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(EmojiFormatter())
 logger = logging.getLogger("SkySwitcher")
-logger.setLevel(logging.INFO)
 logger.addHandler(handler)
+# Note: Level is set in __main__ based on arguments
 
 # --- Layout Database ---
 LAYOUT_US = "`qwertyuiop[]\\asdfghjkl;'zxcvbnm,./~@#$%^&QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>?"
@@ -51,9 +50,24 @@ class DeviceManager:
     REQUIRED_KEYS = {e.KEY_SPACE, e.KEY_ENTER, e.KEY_A, e.KEY_Z}
 
     @staticmethod
+    def list_available():
+        """Prints all available input devices for debugging."""
+        devices = []
+        try:
+            devices = [InputDevice(path) for path in list_devices()]
+        except OSError:
+            print("❌ Failed to list devices. Check permissions.", file=sys.stderr)
+            return
+
+        devices.sort(key=lambda x: x.path)
+        print(f"{'PATH':<20} | {'NAME'}")
+        print("-" * 60)
+        for dev in devices:
+            print(f"{dev.path:<20} | {dev.name}")
+
+    @staticmethod
     def find_keyboard() -> InputDevice:
         devices = []
-
         try:
             devices = [InputDevice(path) for path in list_devices()]
         except OSError:
@@ -72,15 +86,15 @@ class DeviceManager:
             supported_keys = set(dev.capabilities()[e.EV_KEY])
             if DeviceManager.REQUIRED_KEYS.issubset(supported_keys):
                 if 'keyboard' in name_lower or 'kbd' in name_lower:
-                    logger.info(f"✅ Connected to: {dev.name}")
+                    logger.info(f"✅ Auto-detected: {dev.name}")
                     return dev
                 possible_candidates.append(dev)
 
         if possible_candidates:
-            logger.info(f"✅ Connected to: {possible_candidates[0].name}")
+            logger.info(f"✅ Auto-detected (best guess): {possible_candidates[0].name}")
             return possible_candidates[0]
 
-        logger.error("❌ No suitable keyboard found!")
+        logger.error("❌ No suitable keyboard found! Use --list to find it manually.")
         sys.exit(1)
 
 
@@ -103,9 +117,19 @@ class TextProcessor:
 
 
 class SkySwitcher:
-    def __init__(self):
-        self.device = DeviceManager.find_keyboard()
+    def __init__(self, device_path=None):
+        # Device Selection Logic
+        if device_path:
+            try:
+                self.device = InputDevice(device_path)
+                logger.info(f"✅ Manual Device: {self.device.name}")
+            except OSError as err:
+                logger.error(f"❌ Failed to open {device_path}: {err}")
+                sys.exit(1)
+        else:
+            self.device = DeviceManager.find_keyboard()
 
+        # Virtual Input Setup
         self.uinput_keys = [
             e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_RIGHTCTRL, e.KEY_RIGHTSHIFT,
             e.KEY_C, e.KEY_V, e.KEY_LEFT, e.KEY_RIGHT, e.KEY_BACKSPACE,
@@ -180,7 +204,7 @@ class SkySwitcher:
         full_text = self.wait_for_new_content()
 
         if not full_text:
-            logger.info("⚠️ Copy failed/empty.")
+            logger.debug("⚠️ Copy failed/empty.")
             self.set_clipboard(backup_clipboard)
             if mode == "last_word": self.send_combo(e.KEY_RIGHT)
             return
@@ -196,7 +220,7 @@ class SkySwitcher:
         converted = self.processor.smart_translate(target_text)
 
         if target_text == converted:
-            logger.info("No change needed.")
+            logger.debug("No change needed.")
             if mode == "last_word": self.send_combo(e.KEY_RIGHT)
             return
 
@@ -259,10 +283,33 @@ class SkySwitcher:
                             if self.last_press_time > 0: self.last_press_time = 0
 
         except KeyboardInterrupt:
-            logger.info("\n🛑 Stopped by user.")
+            print("\n🛑 Stopped by user.")
         except OSError as err:
             logger.error(f"❌ Device error: {err}")
 
 
 if __name__ == "__main__":
-    SkySwitcher().run()
+    parser = argparse.ArgumentParser(description="SkySwitcher Layout Corrector")
+    parser.add_argument("-d", "--device", help="Path to input device (e.g. /dev/input/eventX)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
+    parser.add_argument("--list", action="store_true", help="List available devices")
+
+    args = parser.parse_args()
+
+    # 1. Handle --list
+    if args.list:
+        DeviceManager.list_available()
+        sys.exit(0)
+
+    # 2. Handle --verbose
+    if args.verbose:
+        logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.WARNING)  # Show only Warnings/Errors if not verbose
+
+    # 3. Check Permissions / root
+    # Note: On NixOS with user groups, geteuid check might be misleading,
+    # but we'll leave it to OSError to catch permission denied.
+
+    # 4. Run
+    SkySwitcher(device_path=args.device).run()
