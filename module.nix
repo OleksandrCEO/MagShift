@@ -22,11 +22,14 @@ in
     # 3. Systemd сервіс
     systemd.user.services.skyswitcher = {
       description = "SkySwitcher Layout Fixer";
-      wantedBy = [ "graphical-session.target" ];
-      after = [ "graphical-session.target" ];
+
+      wantedBy = [ "default.target" ];
+      partOf = [ "graphical-session.target" ];
+
       serviceConfig = {
         ExecStart = "${pkgs.skyswitcher}/bin/skyswitcher";
         Restart = "always";
+        RestartSec = "3"; # Чекаємо трохи перед перезапуском, якщо впаде
       };
     };
   };
