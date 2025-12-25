@@ -6,4 +6,9 @@ pkgs.mkShell {
     pkgs.wl-clipboard
     pkgs.evtest
   ];
+
+  shellHook = ''
+    echo "SkySwitcher environment loaded."
+    echo "Run: python3 main.py"
+  '';
 }
