@@ -1,12 +1,12 @@
-
 #!/usr/bin/env python3
 # main.py
 
 """
-SkySwitcher v0.4.0
+SkySwitcher v0.4.1
 Merged functionality:
 - Core Logic: Robust v0.3.8 architecture (Reliable clipboard, no sudo hacks).
 - CLI Features: Restored v0.2.1 arguments (--list, --device, --verbose).
+- Fix: Added release validation to prevent accidental triggering while holding Shift.
 """
 
 import sys
@@ -17,7 +17,7 @@ import argparse
 from evdev import InputDevice, UInput, ecodes as e, list_devices
 
 # --- Configuration ---
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 DOUBLE_PRESS_DELAY = 0.5
 LAYOUT_SWITCH_COMBO = [e.KEY_LEFTMETA, e.KEY_SPACE]
 
@@ -150,6 +150,9 @@ class SkySwitcher:
         self.last_press_time = 0
         self.modifier_down = False
 
+        # New flag to track if trigger was physically released
+        self.trigger_released = True
+
         self.trigger_btn = e.KEY_RIGHTSHIFT
         self.mode2_modifier = e.KEY_RIGHTCTRL
 
@@ -268,22 +271,30 @@ class SkySwitcher:
                         self.modifier_down = (event.value == 1 or event.value == 2)
 
                     if event.code == self.trigger_btn:
-                        if event.value == 1:
+                        # Handle Release event to validate double-press
+                        if event.value == 0:
+                            self.trigger_released = True
+
+                        elif event.value == 1:
                             if self.modifier_down:
                                 logger.info("✨ Mode 2: Selection Fix")
                                 self.process_correction(mode="selection")
                                 self.last_press_time = 0
+                                self.trigger_released = False
                             else:
                                 now = time.time()
-                                if now - self.last_press_time < DOUBLE_PRESS_DELAY:
+                                # Only trigger if key was actually released between presses
+                                if (now - self.last_press_time < DOUBLE_PRESS_DELAY) and self.trigger_released:
                                     logger.info("⚡ Mode 1: Double Shift")
                                     self.process_correction(mode="last_word")
                                     self.last_press_time = 0
+                                    self.trigger_released = False
                                 else:
                                     self.last_press_time = now
+                                    self.trigger_released = False
 
-                        elif event.value == 1 and event.code != self.mode2_modifier:
-                            if self.last_press_time > 0: self.last_press_time = 0
+                    elif event.value == 1 and event.code != self.mode2_modifier:
+                        if self.last_press_time > 0: self.last_press_time = 0
 
         except KeyboardInterrupt:
             print("\n🛑 Stopped by user.")
@@ -309,10 +320,6 @@ if __name__ == "__main__":
         logger.setLevel(logging.INFO)
     else:
         logger.setLevel(logging.WARNING)  # Show only Warnings/Errors if not verbose
-
-    # 3. Check Permissions / root
-    # Note: On NixOS with user groups, geteuid check might be misleading,
-    # but we'll leave it to OSError to catch permission denied.
 
     # 4. Run
     SkySwitcher(device_path=args.device).run()
