@@ -42,12 +42,13 @@ Add this to your `configuration.nix`:
 ### Arguments
 - `--verbose` (`-v`): Show logs (detected keys, conversions).
 - `--device` (`-d`): Manually specify input device path (if auto-detection fails).
+- `--list`: List all detected input devices and exit.
 
 ## 🤖 Auto-start (Systemd)
 
 To run SkySwitcher in the background automatically:
 
-1. Create `~/.config/systemd/user/skyswitcher.service`:
+1. Create `nano ~/.config/systemd/user/skyswitcher.service`:
 
        [Unit]
        Description=SkySwitcher Layout Corrector
