@@ -28,11 +28,11 @@ Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 
 ## ❄️ NixOS Installation (Flake)
 
-Since this project exports a NixOS module, installation is very clean.
+Since this project exports a NixOS module, installation is clean, but requires an overlay to make the package available to the system.
 
 ### 1. Add to `flake.nix`
 
-Add the input and import the module in your system configuration:
+Add the input, import the module, and **apply the overlay** in your system configuration:
 
     {
       inputs = {
@@ -40,7 +40,7 @@ Add the input and import the module in your system configuration:
         
         # Add SkySwitcher input
         skyswitcher.url = "github:OleksandrCEO/SkySwitcher";
-        # skyswitcher.inputs.nixpkgs.follows = "nixpkgs"; # Optional optimization
+        # skyswitcher.inputs.nixpkgs.follows = "nixpkgs"; 
       };
 
       outputs = { self, nixpkgs, skyswitcher, ... }: {
@@ -49,8 +49,17 @@ Add the input and import the module in your system configuration:
           modules = [
             ./configuration.nix
             
-            # Import the module
+            # 1. Import the module
             skyswitcher.nixosModules.default
+
+            # 2. Add Overlay (Required)
+            ({ pkgs, ... }: {
+              nixpkgs.overlays = [
+                (final: prev: {
+                  skyswitcher = skyswitcher.packages.${prev.stdenv.hostPlatform.system}.default;
+                })
+              ];
+            })
           ];
         };
       };
@@ -64,7 +73,6 @@ You simply need to enable the service and grant your user permission to use inpu
 
     {
       # 1. Enable SkySwitcher
-      # This automatically sets up the systemd service and installs the package.
       services.skyswitcher.enable = true;
 
       # 2. Grant Permissions (CRITICAL)

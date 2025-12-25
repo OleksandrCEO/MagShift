@@ -1,5 +1,4 @@
 # module.nix
-
 { config, lib, pkgs, ... }:
 
 let
@@ -11,23 +10,16 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # 1. Автоматично додаємо пакет у систему
+    # 1. Пакет (ми очікуємо, що pkgs.skyswitcher ВЖЕ існує завдяки оверлею у flake.nix)
     environment.systemPackages = [
       pkgs.skyswitcher
       pkgs.wl-clipboard
     ];
 
-    # 2. Додаємо оверлей, щоб pkgs.skyswitcher існував
-    nixpkgs.overlays = [
-      (final: prev: {
-        skyswitcher = import ./default.nix { pkgs = prev; };
-      })
-    ];
-
-    # 3. Налаштовуємо групи (тут ми чесно кажемо користувачу, що треба права)
+    # 2. Права доступу
     hardware.uinput.enable = true;
 
-    # Автоматичне створення Systemd сервісу (за бажанням)
+    # 3. Systemd сервіс
     systemd.user.services.skyswitcher = {
       description = "SkySwitcher Layout Fixer";
       wantedBy = [ "graphical-session.target" ];
