@@ -70,6 +70,63 @@ Add the input, import the module, and **apply the overlay** in your system confi
       };
     }
 
+### 2. Enable in `configuration.nix`
+
+    { config, pkgs, ... }:
+
+    {
+      # Enable SkySwitcher
+      services.skyswitcher.enable = true;
+    }
+
+> **Note:** With the new udev-based approach, users **do not need** to be added to `input` or `uinput` groups. Permissions are granted dynamically to the active graphical session user.
+
+### 3. Update SkySwitcher (when script updates but Nix flake hasn't)
+
+If you've made local changes or want to pull the latest version:
+
+    cd /etc/nixos
+    sudo nix flake update skyswitcher
+    sudo nixos-rebuild switch
+
+If you track your NixOS config in git:
+
+    cd /etc/nixos
+    sudo git add .
+    sudo git commit -m "Update SkySwitcher to latest version"
+    sudo nixos-rebuild switch
+
+---
+
+## 🐧 Installation (Ubuntu / Fedora / Arch)
+
+For non-NixOS systems, use the provided installer script:
+
+### Quick Install
+
+    # Download the latest release
+    wget https://github.com/OleksandrCEO/SkySwitcher/archive/refs/heads/master.zip
+    unzip master.zip
+    cd SkySwitcher-master
+
+    # Run installer (requires root)
+    sudo ./install.sh
+
+The installer will:
+1. Install `python3-evdev` via your package manager (apt/dnf/pacman)
+2. Copy `main.py` to `/usr/local/bin/skyswitcher`
+3. Create udev rules for dynamic device permissions
+4. Reload udev to apply changes
+
+### Update
+
+To update to the latest version, simply download and run the installer again:
+
+    wget https://github.com/OleksandrCEO/SkySwitcher/archive/refs/heads/master.zip
+    unzip -o master.zip
+    cd SkySwitcher-master
+    sudo ./install.sh
+
 ---
 
 ## 🤖 Autostart (KDE Plasma)
