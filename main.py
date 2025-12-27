@@ -1,11 +1,11 @@
 # main.py
 
-# SkySwitcher v0.4.3 (No-Clipboard Edition)
-# Evolution:
-# - Removed: wl-clipboard dependency, TextProcessor, Selection Mode.
-# - Added: InputBuffer to track physical keystrokes.
-# - Strategy: "Replay" logic. Instead of translating text, we simply
-#   delete the wrong keystrokes, switch layout, and re-type them.
+# SkySwitcher v0.4.5 (Time-based Reset)
+# Features:
+# - No-Clipboard Mode (Direct key replay via uinput).
+# - Persistent Buffer: Replaying does NOT clear history (allows cycling layouts).
+# - UX Improvement: Buffer resets automatically if typing stops for > 3 seconds.
+#   (Replaces the old Enter/Esc reset logic).
 
 import sys
 import time
@@ -14,8 +14,9 @@ import argparse
 from evdev import InputDevice, UInput, ecodes as e, list_devices
 
 # --- Configuration ---
-VERSION = "0.4.3"
+VERSION = "0.4.5"
 DOUBLE_PRESS_DELAY = 0.5
+TYPING_TIMEOUT = 3.0  # Seconds to wait before considering it a "new typing session"
 LAYOUT_SWITCH_COMBO = [e.KEY_LEFTMETA, e.KEY_SPACE]
 
 
@@ -31,12 +32,42 @@ handler.setFormatter(EmojiFormatter())
 logger = logging.getLogger("SkySwitcher")
 logger.addHandler(handler)
 
+# --- Helper for Logging ---
+KEY_MAP = {
+    e.KEY_Q: 'q', e.KEY_W: 'w', e.KEY_E: 'e', e.KEY_R: 'r', e.KEY_T: 't', e.KEY_Y: 'y', e.KEY_U: 'u', e.KEY_I: 'i',
+    e.KEY_O: 'o', e.KEY_P: 'p',
+    e.KEY_A: 'a', e.KEY_S: 's', e.KEY_D: 'd', e.KEY_F: 'f', e.KEY_G: 'g', e.KEY_H: 'h', e.KEY_J: 'j', e.KEY_K: 'k',
+    e.KEY_L: 'l',
+    e.KEY_Z: 'z', e.KEY_X: 'x', e.KEY_C: 'c', e.KEY_V: 'v', e.KEY_B: 'b', e.KEY_N: 'n', e.KEY_M: 'm',
+    e.KEY_1: '1', e.KEY_2: '2', e.KEY_3: '3', e.KEY_4: '4', e.KEY_5: '5', e.KEY_6: '6', e.KEY_7: '7', e.KEY_8: '8',
+    e.KEY_9: '9', e.KEY_0: '0',
+    e.KEY_MINUS: '-', e.KEY_EQUAL: '=', e.KEY_LEFTBRACE: '[', e.KEY_RIGHTBRACE: ']', e.KEY_BACKSLASH: '\\',
+    e.KEY_SEMICOLON: ';', e.KEY_APOSTROPHE: "'", e.KEY_COMMA: ',', e.KEY_DOT: '.', e.KEY_SLASH: '/', e.KEY_GRAVE: '`',
+    e.KEY_SPACE: ' '
+}
+
+
+def decode_keys(key_list):
+    """Converts a list of (keycode, shift) into a string for logging."""
+    result = ""
+    for code, shift in key_list:
+        char = KEY_MAP.get(code, '?')
+        if shift and char.isalpha():
+            char = char.upper()
+        elif shift:
+            shift_map = {'1': '!', '2': '@', '3': '#', '4': '$', '5': '%', '6': '^', '7': '&', '8': '*', '9': '(',
+                         '0': ')', '-': '_', '=': '+', '[': '{', ']': '}', '\\': '|', ';': ':', "'": '"', ',': '<',
+                         '.': '>', '/': '?', '`': '~'}
+            char = shift_map.get(char, char)
+        result += char
+    return result
+
 
 class DeviceManager:
     IGNORED_KEYWORDS = [
         'mouse', 'webcam', 'audio', 'video', 'consumer',
         'control', 'headset', 'receiver', 'solaar', 'hotkeys',
-        'button', 'switch', 'hda', 'dock', 'deck', 'touchpad'
+        'button', 'switch', 'hda', 'dock'
     ]
     REQUIRED_KEYS = {e.KEY_SPACE, e.KEY_ENTER, e.KEY_A, e.KEY_Z}
 
@@ -89,54 +120,42 @@ class DeviceManager:
 
 class InputBuffer:
     """
-    Tracks the history of typed keys to allow 'replay' on a different layout.
-    Stores tuples: (keycode, is_shifted)
+    Tracks keys for replay with time-based reset logic.
     """
 
     def __init__(self):
         self.buffer = []
-        # Keys that reset the buffer (safety mechanism)
-        self.reset_keys = {
-            e.KEY_ENTER, e.KEY_ESC, e.KEY_TAB,
-            e.KEY_UP, e.KEY_DOWN, e.KEY_LEFT, e.KEY_RIGHT,
-            e.KEY_HOME, e.KEY_END, e.KEY_PAGEUP, e.KEY_PAGEDOWN
-        }
-        # Keys that we want to track for replay (letters, numbers, punctuation, space)
-        # We define a range or logic check in the `add` method, but here are explicit ones:
-        self.trackable_range = range(e.KEY_1, e.KEY_SLASH + 1)  # Covers most main block keys
+        self.last_key_time = 0  # Timestamp of the last added key
+        self.trackable_range = range(e.KEY_1, e.KEY_SLASH + 1)
 
     def add(self, keycode, is_shifted):
-        # If it's a "Reset" key (like Enter or Arrows), clear history
-        if keycode in self.reset_keys:
-            self.clear()
-            return
+        now = time.time()
 
-        # If Backspace, remove last item
+        # --- Time-based Reset Logic ---
+        # If too much time passed since last key, we assume a new thought/sentence started.
+        if (now - self.last_key_time) > TYPING_TIMEOUT:
+            if self.buffer:
+                # logger.debug(f"⏳ Timeout ({TYPING_TIMEOUT}s) reached. Buffer cleared.")
+                self.buffer = []
+
+        self.last_key_time = now
+
+        # Handle Backspace
         if keycode == e.KEY_BACKSPACE:
             if self.buffer:
                 self.buffer.pop()
             return
 
-        # If it's a standard typing key, add to buffer
+        # Add regular keys
         if keycode == e.KEY_SPACE or keycode in self.trackable_range:
             self.buffer.append((keycode, is_shifted))
-            # Limit buffer size to prevent memory issues (though unlikely)
-            if len(self.buffer) > 100:
+            if len(self.buffer) > 100:  # Safety cap
                 self.buffer.pop(0)
 
-    def clear(self):
-        self.buffer = []
-
     def get_last_phrase(self):
-        """
-        Returns the keys for the last 'word' plus any trailing spaces.
-        Example: [k_H, k_I, k_SPACE, k_T, k_H, k_E, k_R, k_E, k_SPACE, k_SPACE]
-        Returns: [k_T, k_H, k_E, k_R, k_E, k_SPACE, k_SPACE]
-        """
         if not self.buffer:
             return []
 
-        # Iterate backwards
         result = []
         found_char = False
 
@@ -145,13 +164,10 @@ class InputBuffer:
 
             if code == e.KEY_SPACE:
                 if found_char:
-                    # We found a space AFTER finding characters -> Word boundary
                     break
                 else:
-                    # We are in trailing spaces
                     result.insert(0, item)
             else:
-                # Normal character
                 found_char = True
                 result.insert(0, item)
 
@@ -173,7 +189,6 @@ class SkySwitcher:
         self.uinput_keys = [
             e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_RIGHTCTRL, e.KEY_RIGHTSHIFT,
             e.KEY_LEFTMETA, e.KEY_LEFTALT, e.KEY_BACKSPACE, e.KEY_SPACE,
-            # Add all standard keys to UInput capability
             *range(e.KEY_ESC, e.KEY_MICMUTE)
         ]
 
@@ -187,8 +202,6 @@ class SkySwitcher:
         self.last_press_time = 0
         self.trigger_released = True
         self.trigger_btn = e.KEY_RIGHTSHIFT
-
-        # Modifier tracking
         self.shift_pressed = False
 
     def send_combo(self, *keys):
@@ -202,7 +215,6 @@ class SkySwitcher:
         time.sleep(0.02)
 
     def replay_keys(self, key_sequence):
-        """Re-types the keys from the buffer."""
         for code, use_shift in key_sequence:
             if use_shift:
                 self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
@@ -217,20 +229,19 @@ class SkySwitcher:
                 self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
                 self.ui.syn()
 
-            time.sleep(0.005)  # Tiny delay for stability
+            time.sleep(0.005)
 
     def fix_last_word(self):
-        # 1. Get keys to fix
         keys_to_replay = self.input_buffer.get_last_phrase()
 
         if not keys_to_replay:
             logger.info("⚠️ Buffer empty or no word found.")
             return
 
-        count = len(keys_to_replay)
-        logger.info(f"🔄 Replaying {count} keys on new layout...")
+        readable_text = decode_keys(keys_to_replay)
+        logger.info(f"Replaying: '{readable_text}' ({len(keys_to_replay)} keys)")
 
-        # 2. Delete current wrong text (Backspace x Count)
+        count = len(keys_to_replay)
         for _ in range(count):
             self.ui.write(e.EV_KEY, e.KEY_BACKSPACE, 1)
             self.ui.syn()
@@ -238,15 +249,10 @@ class SkySwitcher:
             self.ui.syn()
             time.sleep(0.002)
 
-        # 3. Switch Layout
         self.send_combo(*LAYOUT_SWITCH_COMBO)
-        time.sleep(0.1)  # Wait for OS to switch
+        time.sleep(0.1)
 
-        # 4. Replay keys (OS will map them to new layout)
         self.replay_keys(keys_to_replay)
-
-        # 5. Clear buffer so we don't double-fix
-        self.input_buffer.clear()
 
     def run(self):
         logger.info(f"🚀 SkySwitcher v{VERSION} (No-Clipboard Mode)")
@@ -261,11 +267,9 @@ class SkySwitcher:
             for event in self.device.read_loop():
                 if event.type == e.EV_KEY:
 
-                    # Track Modifier State (Shift)
                     if event.code in [e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT]:
                         self.shift_pressed = (event.value == 1 or event.value == 2)
 
-                    # Trigger Logic (Right Shift)
                     if event.code == self.trigger_btn:
                         if event.value == 0:
                             self.trigger_released = True
@@ -279,14 +283,11 @@ class SkySwitcher:
                                 self.last_press_time = now
                                 self.trigger_released = False
 
-                    # Buffer Tracking Logic
-                    # Only process key DOWN (1) or REPEAT (2) events
+                    # Buffer Logic: Only add if key is pressed (1) or repeated (2)
                     elif event.value in [1, 2]:
-                        # Don't add the trigger key itself to buffer
                         if event.code != self.trigger_btn:
                             self.input_buffer.add(event.code, self.shift_pressed)
 
-                        # Reset double-press timer if user types other keys
                         if self.last_press_time > 0:
                             self.last_press_time = 0
 
