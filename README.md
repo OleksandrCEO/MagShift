@@ -18,7 +18,7 @@ Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 * **🖋️ Auto-Correction:** It automatically corrects the **last typed phrase** when you switch.
 * **🔒 Secure:** Runs with dynamic permissions (via Udev ACLs), no manual group configuration required.
 * **❄️ Pure Nix:** Zero global dependencies. Builds cleanly from the Nix Store.
-## 🎮 Controls
+
 
 
 ## 📝 Clipboard Version
