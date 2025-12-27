@@ -23,7 +23,7 @@ Also supports other Linux distros via a simple installer script. For example:
 
 
 
-## 📝 Clipboard Version
+## 📋 Clipboard Version
 
 Old unsecure version with clipboard dependency and extra features (like handling selected text) available in extra branch: [SkySwitcher](https://github.com/OleksandrCEO/SkySwitcher)
 
