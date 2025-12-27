@@ -21,11 +21,6 @@ Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 ## 🎮 Controls
 
 
-| Action | Shortcut | Description |
-| :--- | :--- | :--- |
-| **Fix Last Word** | `Right Shift` (x2) | Selects last word, translates it, replaces text, and switches system layout. |
-
-
 ## 📝 Clipboard Version
 
 Old unsecure version with clipboard dependency and extra features (like handling selected text) available in extra branch: [feature-clipboard](https://github.com/OleksandrCEO/SkySwitcher)
