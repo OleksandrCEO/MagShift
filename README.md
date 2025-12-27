@@ -17,6 +17,12 @@ Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 * **🔒 Secure:** Runs with standard user permissions (via `uinput` group), no `sudo` required after setup.
 * **❄️ Pure Nix:** Zero global dependencies. Builds cleanly from the Nix Store.
 
+
+## Clipboard Version
+
+Old version with clipboard dependency and extra features (like handling selected text) available in extra branch: [feature-clipboard](https://github.com/OleksandrCEO/SkySwitcher/tree/feature-clipboard)
+
+
 ## 🎮 Controls
 
 | Action | Shortcut | Description |
@@ -24,9 +30,6 @@ Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 | **Fix Last Word** | `Right Shift` (x2) | Selects last word, translates it, replaces text, and switches system layout. |
 | **Fix Selection** | `R-Ctrl` + `R-Shift` | Converts the currently selected text (clipboard-based). |
 
-## Clipboard Version
-
-Old version with clipboard dependency and extra features (like handling selected text) available in extra branch: [feature-clipboard](https://github.com/OleksandrCEO/SkySwitcher/tree/feature-clipboard)
 
 ---
 
