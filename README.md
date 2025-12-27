@@ -6,7 +6,9 @@
 
 **MagShift** - Advanced Keyboard Layout Switcher with Instant Correction Engine for Linux (Wayland & X11). It fixes what you just typed without making you retype it.
 
-Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
+Designed with **NixOS Flakes** in mind for reproducible and secure deployment. 
+
+Also supports other Linux distros via a simple installer script. For example: 
 
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-Supported-E95420?style=flat&logo=ubuntu&logoColor=white)](#-installation-ubuntu--fedora--arch)
 [![Fedora](https://img.shields.io/badge/Fedora-Supported-51A2DA?style=flat&logo=fedora&logoColor=white)](#-installation-ubuntu--fedora--arch)
