@@ -12,7 +12,7 @@ Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 
 * **⚡ Double Right Shift:** Tap `Right Shift` twice to switch layout (e.g., English ↔ Ukrainian).
 * **🖋️ Auto-Correction:** It automatically corrects the **last typed phrase** when you switch.
-* **🔒 Secure:** Runs with standard user permissions (via `uinput` group), no `sudo` required after setup.
+* **🔒 Secure:** Runs with dynamic permissions (via Udev ACLs), no manual group configuration required.
 * **❄️ Pure Nix:** Zero global dependencies. Builds cleanly from the Nix Store.
 
 
@@ -69,26 +69,6 @@ Add the input, import the module, and **apply the overlay** in your system confi
         };
       };
     }
-
-### 2. Enable in `configuration.nix`
-
-You simply need to enable the service (to install the package) and grant your user permission to use input devices.
-
-    { config, pkgs, ... }:
-
-    {
-      # 1. Enable SkySwitcher package installation
-      services.skyswitcher.enable = true;
-
-      # 2. Grant Permissions (CRITICAL)
-      # The user needs to be in 'input' (to read keys) and 'uinput' (to write keys).
-      users.users.your_username = {
-        isNormalUser = true;
-        extraGroups = [ "wheel" "input" "uinput" ]; 
-      };
-    }
-
-> **Note:** After rebuilding (`sudo nixos-rebuild switch`), you MUST **reboot** or log out/in for group permissions (`uinput`) to take effect.
 
 ---
 
