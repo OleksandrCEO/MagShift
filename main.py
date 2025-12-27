@@ -176,8 +176,6 @@ class DeviceManager:
         logger.error("[✗] No keyboard found. Use --list.")
         sys.exit(1)
 
-        return None
-
 
 # --- Input Buffer (From v0.4.9) ---
 class InputBuffer:
@@ -454,7 +452,8 @@ class MagShift:
             logger.error(f"[✗] Device error: {err}")
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for MagShift application."""
     parser = argparse.ArgumentParser(description="MagShift - Advanced Keyboard Layout Switcher with Instant Correction Engine")
 
     # Device argument
@@ -490,3 +489,7 @@ if __name__ == "__main__":
     logger.info(f"[i] Using hotkey style: {args.hotkey} -> {selected_keys}")
 
     MagShift(device_path=args.device, switch_keys=selected_keys).run()
+
+
+if __name__ == "__main__":
+    main()
