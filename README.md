@@ -1,11 +1,12 @@
 # MagShift 🪄
 
 [![NixOS](https://img.shields.io/badge/NixOS-25.11+-5277C3?style=flat&logo=nixos&logoColor=white)](#-nixos-installation-flake)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
+
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-Supported-E95420?style=flat&logo=ubuntu&logoColor=white)](#-installation-ubuntu--fedora--arch)
 [![Fedora](https://img.shields.io/badge/Fedora-Supported-51A2DA?style=flat&logo=fedora&logoColor=white)](#-installation-ubuntu--fedora--arch)
 [![Arch](https://img.shields.io/badge/Arch-Supported-1793D1?style=flat&logo=archlinux&logoColor=white)](#-installation-ubuntu--fedora--arch)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org)
-[![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
 **MagShift** - Advanced Keyboard Layout Switcher with Instant Correction Engine for Linux (Wayland & X11). It fixes what you just typed without making you retype it.
 
