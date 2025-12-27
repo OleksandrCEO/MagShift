@@ -1,3 +1,5 @@
+# module.nix
+
 { config, lib, pkgs, ... }:
 
 let
