@@ -41,14 +41,22 @@ HOTKEY_STYLES = {
 
 
 # --- Logging Setup ---
-class EmojiFormatter(logging.Formatter):
-    def format(self, record):
-        log_time = time.strftime("%H:%M:%S", time.localtime(record.created))
-        return f"[{log_time}] {record.getMessage()}"
+def _format_log_record(record: logging.LogRecord) -> str:
+    """Format log record with timestamp prefix.
+
+    Args:
+        record: Log record to format
+
+    Returns:
+        Formatted log message with timestamp
+    """
+    log_time = time.strftime("%H:%M:%S", time.localtime(record.created))
+    return f"[{log_time}] {record.getMessage()}"
 
 
 handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(EmojiFormatter())
+handler.setFormatter(logging.Formatter(fmt='%(message)s'))
+handler.format = _format_log_record
 
 logger = logging.getLogger("SkySwitcher")
 logger.addHandler(handler)
@@ -91,14 +99,22 @@ def decode_keys(key_list: list[tuple[int, bool]]) -> str:
     return result
 
 
-# --- Device Detection (From v0.4.9) ---
 class DeviceManager:
+    """Utility class for keyboard device detection and management.
+
+    This is a static utility class and should not be instantiated.
+    """
+
     IGNORED_KEYWORDS = [
         'mouse', 'webcam', 'audio', 'video', 'consumer',
         'control', 'headset', 'receiver', 'solaar', 'hotkeys',
         'button', 'switch', 'hda', 'dock'
     ]
     REQUIRED_KEYS = {e.KEY_SPACE, e.KEY_ENTER, e.KEY_A, e.KEY_Z}
+
+    def __init__(self):
+        """Prevent instantiation of utility class."""
+        raise TypeError("DeviceManager is a utility class and should not be instantiated")
 
     @staticmethod
     def list_available():
@@ -109,7 +125,7 @@ class DeviceManager:
                 dev = InputDevice(path)
                 print(f"{dev.path:<20} | {dev.name}")
         except OSError as err:
-            logger.error(f"❌ Failed to list devices: {err}")
+            logger.error(f"[✗] Failed to list devices: {err}")
 
     @staticmethod
     def find_keyboard() -> InputDevice:
@@ -121,10 +137,13 @@ class DeviceManager:
         Raises:
             SystemExit: If no keyboard is found or device access fails
         """
+        # for correct IDE linting
+        paths = []
+
         try:
             paths = list_devices()
-        except OSError as e:
-            logger.error(f"Failed to access input devices: {e}")
+        except OSError as err:
+            logger.error(f"[✗] Failed to access input devices: {err}")
             sys.exit(1)
 
         possible_candidates = []
@@ -145,17 +164,19 @@ class DeviceManager:
             supported_keys = set(caps[e.EV_KEY])
             if DeviceManager.REQUIRED_KEYS.issubset(supported_keys):
                 if 'keyboard' in name_lower or 'kbd' in name_lower:
-                    logger.info(f"✅ Auto-detected keyboard: {dev.name} ({dev.path.split('/')[-1]})")
+                    logger.info(f"[✓] Auto-detected keyboard: {dev.name} ({dev.path.split('/')[-1]})")
                     return dev
                 possible_candidates.append(dev)
 
         if possible_candidates:
             best = possible_candidates[0]
-            logger.info(f"✅ Auto-detected keyboard (best guess): {best.name} ({best.path.split('/')[-1]})")
+            logger.info(f"[✓] Auto-detected keyboard (best guess): {best.name} ({best.path.split('/')[-1]})")
             return best
 
-        logger.error("❌ No keyboard found. Use --list.")
+        logger.error("[✗] No keyboard found. Use --list.")
         sys.exit(1)
+
+        return None
 
 
 # --- Input Buffer (From v0.4.9) ---
@@ -165,7 +186,7 @@ class InputBuffer:
         self.last_key_time = 0
         self.trackable_range = range(e.KEY_1, e.KEY_SLASH + 1)
 
-    def add(self, keycode: int, is_shifted: bool) -> None:
+    def add(self, keycode: int, is_shifted: bool):
         """Add a keystroke to the buffer.
 
         Args:
@@ -233,9 +254,9 @@ class SkySwitcher:
         if device_path:
             try:
                 self.device = InputDevice(device_path)
-                logger.info(f"Manual device: {self.device.name}")
+                logger.info(f"[i] Manual device: {self.device.name}")
             except OSError as err:
-                logger.error(f"Failed to open device {device_path}: {err}")
+                logger.error(f"[✗] Failed to open device {device_path}: {err}")
                 sys.exit(1)
         else:
             self.device = DeviceManager.find_keyboard()
@@ -252,7 +273,7 @@ class SkySwitcher:
         try:
             self.ui = UInput({e.EV_KEY: self.uinput_keys}, name="SkySwitcher-Virtual")
         except OSError as err:
-            logger.error(f"Failed to create UInput device: {err}")
+            logger.error(f"[✗] Failed to create UInput device: {err}")
             sys.exit(1)
 
         # Initialize buffer and state
@@ -263,7 +284,7 @@ class SkySwitcher:
         self.shift_pressed = False
         self.pending_action = False
 
-    def perform_layout_switch(self) -> None:
+    def perform_layout_switch(self):
         """Switch keyboard layout using configured hotkey combination.
 
         Prevents unintended menu activation (e.g., Alt menu in KDE) by
@@ -273,8 +294,6 @@ class SkySwitcher:
         Example: [Alt, Shift] -> Release Alt first -> State becomes Shift (Safe!)
         If we release Shift first -> State becomes Alt -> Release Alt -> Menu triggers.
         """
-        logger.info("🔀 Switching Layout...")
-
         if not self.switch_keys:
             return
 
@@ -295,7 +314,7 @@ class SkySwitcher:
         # Allow layout to stabilize
         time.sleep(LAYOUT_SWITCH_SETTLE_TIME)
 
-    def replay_keys(self, key_sequence) -> None:
+    def replay_keys(self, key_sequence):
         """Replay a sequence of keystrokes with proper shift handling.
 
         Args:
@@ -314,7 +333,7 @@ class SkySwitcher:
                 self.ui.syn()
             time.sleep(KEY_REPLAY_DELAY)
 
-    def reset_modifiers(self) -> None:
+    def reset_modifiers(self):
         """Force release all modifier keys to prevent stuck key states.
 
         Extended modifier list ensures clean state reset for all possible
@@ -335,7 +354,7 @@ class SkySwitcher:
         # Allow OS time to update keyboard state before sending backspace
         time.sleep(MODIFIER_RESET_DELAY)
 
-    def fix_last_word(self) -> None:
+    def fix_last_word(self):
         """Correct the last typed phrase by switching layout.
 
         Process:
@@ -346,14 +365,14 @@ class SkySwitcher:
         """
         keys_to_replay = self.input_buffer.get_last_phrase()
         if not keys_to_replay:
-            logger.info("⚠️ Buffer empty.")
+            logger.info("[!] Buffer empty.")
             return
 
         # Release virtual modifiers
         self.reset_modifiers()
 
         readable_text = decode_keys(keys_to_replay)
-        logger.info(f"🔄 Correcting: '{readable_text}'")
+        logger.info(f"[>] Correcting: '{readable_text}'")
 
         # Delete the phrase
         for _ in range(len(keys_to_replay)):
@@ -369,7 +388,7 @@ class SkySwitcher:
         # Replay in new layout
         self.replay_keys(keys_to_replay)
 
-    def run(self) -> None:
+    def run(self):
         """Main event loop for keyboard monitoring and correction.
 
         Monitors keyboard input events and triggers layout correction on
@@ -381,7 +400,7 @@ class SkySwitcher:
         - Keystroke buffering for correction replay
         - Graceful shutdown on Ctrl+C
         """
-        logger.info(f"🚀 SkySwitcher v{VERSION}")
+        logger.info(f"[>] SkySwitcher v{VERSION}")
 
         # Test device grab capability
         try:
@@ -418,7 +437,6 @@ class SkySwitcher:
 
                             # Execute correction on double-press
                             if self.pending_action:
-                                logger.info("✨ Trigger confirmed (on release)")
                                 self.fix_last_word()
                                 self.pending_action = False
 
@@ -431,9 +449,9 @@ class SkySwitcher:
                             self.last_press_time = 0
 
         except KeyboardInterrupt:
-            print("\n🛑 Stopped by user.")
+            print("\n[✓] Stopped by user.")
         except OSError as err:
-            logger.error(f"❌ Device error: {err}")
+            logger.error(f"[✗] Device error: {err}")
 
 
 if __name__ == "__main__":
@@ -469,6 +487,6 @@ if __name__ == "__main__":
 
     # Resolve keys based on argument
     selected_keys = HOTKEY_STYLES[args.hotkey]
-    logger.info(f"🔑 Using hotkey style: {args.hotkey} -> {selected_keys}")
+    logger.info(f"[i] Using hotkey style: {args.hotkey} -> {selected_keys}")
 
     SkySwitcher(device_path=args.device, switch_keys=selected_keys).run()
