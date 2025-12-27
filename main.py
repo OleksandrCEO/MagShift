@@ -1,6 +1,6 @@
 # main.py
 
-# SkySwitcher v0.5.8 (Added CLI hotkey selection)
+# SkySwitcher v0.5.9 (Added CLI hotkey selection)
 #
 # Architecture:
 # - Keyboard Device Detection
