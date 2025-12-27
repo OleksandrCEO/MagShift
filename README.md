@@ -74,12 +74,18 @@ Add the input, import the module, and **apply the overlay** in your system confi
 
 ## 🤖 Autostart (KDE Plasma)
 
-Since this tool relies on the graphical session (Wayland/X11) and clipboard, the most reliable way to start it is via KDE settings.
+Since this tool relies on the graphical session (Wayland/X11), the most reliable way to start it is via KDE settings.
 
 1.  Open **System Settings** (Системні параметри) -> **Autostart** (Автозапуск).
 2.  Click **+ Add New** (+ Додати нове) -> **Application...** (Програма...).
     * *Do not select "Login Script".*
-3.  Type `skyswitcher` in the search bar and press Apply (Гаразд).
+3.  Type `skyswitcher` in the search bar and select it.
+4.  *(Optional)* If you want to use a different layout switching hotkey, click on the added entry, then click **Properties** and modify the command:
+    * For Alt+Shift: `skyswitcher -k alt`
+    * For Ctrl+Shift: `skyswitcher -k ctrl`
+    * For CapsLock: `skyswitcher -k caps`
+    * Default is Meta+Space (`-k meta`)
+5.  Click Apply (Гаразд).
 
 That's it! SkySwitcher will now start automatically with your user session.
 
@@ -95,8 +101,20 @@ If you want to run it manually for debugging or development:
     # Run with verbose logging to see key events
     python3 main.py --verbose
 
-    # List available input devices (keyboads)
+    # List available input devices (keyboards)
     python3 main.py --list
+
+    # Use a different layout switching hotkey
+    python3 main.py -k alt    # Alt+Shift (default in many Linux DEs)
+    python3 main.py -k meta   # Meta+Space (default, KDE-style)
+    python3 main.py -k ctrl   # Ctrl+Shift
+    python3 main.py -k caps   # CapsLock
+
+Available hotkey styles:
+- `alt` - Left Alt + Left Shift (common on GNOME/XFCE)
+- `meta` - Left Meta (Windows key) + Space (default, KDE standard)
+- `ctrl` - Left Ctrl + Left Shift
+- `caps` - CapsLock only
 
 ## 📜 License
 
