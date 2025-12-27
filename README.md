@@ -1,8 +1,9 @@
 # MagShift 🪄
 
-![NixOS](https://img.shields.io/badge/NixOS-25.11+-5277C3?style=flat&logo=nixos&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green)
+[![NixOS](https://img.shields.io/badge/NixOS-25.11+-5277C3?style=flat&logo=nixos&logoColor=white)](#-nixos-installation-flake)
+[![Linux](https://img.shields.io/badge/Linux-Ubuntu%20|%20Fedora%20|%20Arch-FCC624?style=flat&logo=linux&logoColor=black)](#-installation-ubuntu--fedora--arch)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
 **MagShift** - Advanced Keyboard Layout Switcher with Instant Correction Engine for Linux (Wayland & X11). It fixes what you just typed without making you retype it.
 
@@ -14,19 +15,18 @@ Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 * **🖋️ Auto-Correction:** It automatically corrects the **last typed phrase** when you switch.
 * **🔒 Secure:** Runs with dynamic permissions (via Udev ACLs), no manual group configuration required.
 * **❄️ Pure Nix:** Zero global dependencies. Builds cleanly from the Nix Store.
-
-
-## 📝 Clipboard Version
-
-Old unsecure version with clipboard dependency and extra features (like handling selected text) available in extra branch: [feature-clipboard](https://github.com/OleksandrCEO/SkySwitcher)
-
-
 ## 🎮 Controls
+
 
 | Action | Shortcut | Description |
 | :--- | :--- | :--- |
 | **Fix Last Word** | `Right Shift` (x2) | Selects last word, translates it, replaces text, and switches system layout. |
 | **Fix Selection** | `R-Ctrl` + `R-Shift` | Converts the currently selected text (clipboard-based). |
+
+
+## 📝 Clipboard Version
+
+Old unsecure version with clipboard dependency and extra features (like handling selected text) available in extra branch: [feature-clipboard](https://github.com/OleksandrCEO/SkySwitcher)
 
 
 ---
