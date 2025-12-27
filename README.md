@@ -24,7 +24,6 @@ Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 | Action | Shortcut | Description |
 | :--- | :--- | :--- |
 | **Fix Last Word** | `Right Shift` (x2) | Selects last word, translates it, replaces text, and switches system layout. |
-| **Fix Selection** | `R-Ctrl` + `R-Shift` | Converts the currently selected text (clipboard-based). |
 
 
 ## 📝 Clipboard Version
