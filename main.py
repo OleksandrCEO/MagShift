@@ -92,7 +92,6 @@ class DeviceManager:
 
     @staticmethod
     def find_keyboard() -> InputDevice:
-        logger.info("🔎 Scanning for keyboards...")
         paths = []  # important for IDE linting
 
         try:
@@ -119,13 +118,13 @@ class DeviceManager:
             supported_keys = set(caps[e.EV_KEY])
             if DeviceManager.REQUIRED_KEYS.issubset(supported_keys):
                 if 'keyboard' in name_lower or 'kbd' in name_lower:
-                    logger.info(f"✅ Auto-detected: {dev.name} ({dev.path.split('/')[-1]})")
+                    logger.info(f"✅ Auto-detected keyboard: {dev.name} ({dev.path.split('/')[-1]})")
                     return dev
                 possible_candidates.append(dev)
 
         if possible_candidates:
             best = possible_candidates[0]
-            logger.info(f"✅ Auto-detected (best guess): {best.name} ({best.path.split('/')[-1]})")
+            logger.info(f"✅ Auto-detected keyboard (best guess): {best.name} ({best.path.split('/')[-1]})")
             return best
 
         logger.error("❌ No keyboard found. Use --list.")
@@ -210,23 +209,35 @@ class SkySwitcher:
         self.pending_action = False
 
     def perform_layout_switch(self):
-        """Simulates physical key press to switch layout (Bypasses KDE Window isolation)."""
+        """
+        Switches layout preventing 'Alt Menu' trigger.
+        Strategy: Release Modifier (Alt) BEFORE releasing the Trigger (Shift).
+        """
         logger.info(f"🔀 Switching Layout...")
 
-        # Press keys
+        if not self.switch_keys:
+            return
+
+        # --- PRESS PHASE ---
+        # Press all keys (Simultaneous press is fine/better for input systems)
         for k in self.switch_keys:
             self.ui.write(e.EV_KEY, k, 1)
         self.ui.syn()
 
-        # Small delay to ensure OS registers "Hold" if needed
+        # Hold to register the combo
         time.sleep(0.05)
 
-        # Release keys (reversed)
-        for k in reversed(self.switch_keys):
+        # --- RELEASE PHASE (The Fix) ---
+        # DO NOT use reversed() here.
+        # We must release keys in the SAME order (or specifically Modifier first).
+        # Example: [Alt, Shift] -> Release Alt first -> State becomes Shift (Safe!)
+        # If we release Shift first -> State becomes Alt -> Release Alt -> Menu triggers.
+
+        for k in self.switch_keys:
             self.ui.write(e.EV_KEY, k, 0)
         self.ui.syn()
 
-        # Wait for OS to actually switch and settle buffers
+        # Stabilize
         time.sleep(0.15)
 
     def replay_keys(self, key_sequence):
@@ -244,14 +255,22 @@ class SkySwitcher:
             time.sleep(0.005)
 
     def reset_modifiers(self):
-        """Force release all modifiers to prevent shortcut pollution"""
-        modifiers = [e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT, e.KEY_LEFTCTRL,
-                     e.KEY_RIGHTCTRL, e.KEY_LEFTALT, e.KEY_LEFTMETA]
+        """Force release all modifiers cleanly."""
+        # Список розширено, щоб точно вбити все, що може залипнути
+        modifiers = [
+            e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT,
+            e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL,
+            e.KEY_LEFTALT, e.KEY_RIGHTALT,
+            e.KEY_LEFTMETA, e.KEY_RIGHTMETA
+        ]
+
+        # 1. Release all modifiers
         for key in modifiers:
             self.ui.write(e.EV_KEY, key, 0)
-
         self.ui.syn()
-        time.sleep(0.02)
+
+        # 2. Critical Wait: Give OS time to update state before we type Backspace
+        time.sleep(0.05)
 
     def fix_last_word(self):
         keys_to_replay = self.input_buffer.get_last_phrase()
