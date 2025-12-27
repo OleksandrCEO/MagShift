@@ -1,16 +1,16 @@
 { config, lib, pkgs, ... }:
 
 let
-  cfg = config.services.skyswitcher;
+  cfg = config.services.magshift;
 in
 {
-  options.services.skyswitcher = {
-    enable = lib.mkEnableOption "SkySwitcher package and dynamic permissions";
+  options.services.magshift = {
+    enable = lib.mkEnableOption "MagShift package and dynamic permissions";
   };
 
   config = lib.mkIf cfg.enable {
     # 1. Install the package to system path so it can be found by KDE Autostart
-    environment.systemPackages = [ pkgs.skyswitcher ];
+    environment.systemPackages = [ pkgs.magshift ];
 
     # 2. Enable uinput kernel module to ensure /dev/uinput device is created
     hardware.uinput.enable = true;

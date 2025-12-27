@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "skyswitcher"
-version = "0.5.9"
+name = "magshift"
+version = "1.0.1"
 description = "Context-aware keyboard layout switcher for Linux"
 authors = [{ name = "Oleksandr Moiseiuk", email = "support@magwer.com" }]
 dependencies = ["evdev>=1.6.0"]
 requires-python = ">=3.10"
 
 [project.scripts]
-skyswitcher = "main:main"  # Assumes you wrap your code in a main() function
+magshift = "main:main"  # Assumes you wrap your code in a main() function

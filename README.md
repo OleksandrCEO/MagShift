@@ -1,10 +1,10 @@
-# SkySwitcher 🌌
+# MagShift 🌌
 
 ![NixOS](https://img.shields.io/badge/NixOS-25.11+-5277C3?style=flat&logo=nixos&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-**SkySwitcher** is a minimalist, context-aware keyboard layout switcher for Linux (Wayland & X11). It fixes what you just typed without making you retype it.
+**MagShift** - Advanced Keyboard Layout Switcher with Instant Correction Engine for Linux (Wayland & X11). It fixes what you just typed without making you retype it.
 
 Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 
@@ -18,7 +18,7 @@ Designed with **NixOS Flakes** in mind for reproducible and secure deployment.
 
 ## 📝 Clipboard Version
 
-Old version with clipboard dependency and extra features (like handling selected text) available in extra branch: [feature-clipboard](https://github.com/OleksandrCEO/SkySwitcher/tree/feature-clipboard)
+Old unsecure version with clipboard dependency and extra features (like handling selected text) available in extra branch: [feature-clipboard](https://github.com/OleksandrCEO/SkySwitcher)
 
 
 ## 🎮 Controls
@@ -43,25 +43,25 @@ Add the input, import the module, and **apply the overlay** in your system confi
       inputs = {
         nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
         
-        # Add SkySwitcher input
-        skyswitcher.url = "github:OleksandrCEO/SkySwitcher";
-        # skyswitcher.inputs.nixpkgs.follows = "nixpkgs"; 
+        # Add MagShift input
+        magshift.url = "github:OleksandrCEO/MagShift";
+        # magshift.inputs.nixpkgs.follows = "nixpkgs"; 
       };
 
-      outputs = { self, nixpkgs, skyswitcher, ... }: {
+      outputs = { self, nixpkgs, magshift, ... }: {
         nixosConfigurations.myhostname = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           modules = [
             ./configuration.nix
-            
+
             # 1. Import the module
-            skyswitcher.nixosModules.default
+            magshift.nixosModules.default
 
             # 2. Add Overlay (Required)
             ({ pkgs, ... }: {
               nixpkgs.overlays = [
                 (final: prev: {
-                  skyswitcher = skyswitcher.packages.${prev.stdenv.hostPlatform.system}.default;
+                  magshift = magshift.packages.${prev.stdenv.hostPlatform.system}.default;
                 })
               ];
             })
@@ -75,25 +75,25 @@ Add the input, import the module, and **apply the overlay** in your system confi
     { config, pkgs, ... }:
 
     {
-      # Enable SkySwitcher
-      services.skyswitcher.enable = true;
+      # Enable MagShift
+      services.magshift.enable = true;
     }
 
 > **Note:** With the new udev-based approach, users **do not need** to be added to `input` or `uinput` groups. Permissions are granted dynamically to the active graphical session user.
 
-### 3. Update SkySwitcher (when script updates but Nix flake hasn't)
+### 3. Update MagShift (when script updates but Nix flake hasn't)
 
 If you've made local changes or want to pull the latest version:
 
     cd /etc/nixos
-    sudo nix flake update skyswitcher
+    sudo nix flake update magshift
     sudo nixos-rebuild switch
 
 If you track your NixOS config in git:
 
     cd /etc/nixos
     sudo git add .
-    sudo git commit -m "Update SkySwitcher to latest version"
+    sudo git commit -m "Update MagShift to latest version"
     sudo nixos-rebuild switch
 
 ---
@@ -105,16 +105,16 @@ For non-NixOS systems, use the provided installer script:
 ### Quick Install
 
     # Download the latest release
-    wget https://github.com/OleksandrCEO/SkySwitcher/archive/refs/heads/master.zip
+    wget https://github.com/OleksandrCEO/MagShift/archive/refs/heads/master.zip
     unzip master.zip
-    cd SkySwitcher-master
+    cd MagShift-master
 
     # Run installer (requires root)
     sudo ./install.sh
 
 The installer will:
 1. Install `python3-evdev` via your package manager (apt/dnf/pacman)
-2. Copy `main.py` to `/usr/local/bin/skyswitcher`
+2. Copy `main.py` to `/usr/local/bin/magshift`
 3. Create udev rules for dynamic device permissions
 4. Reload udev to apply changes
 
@@ -122,9 +122,9 @@ The installer will:
 
 To update to the latest version, simply download and run the installer again:
 
-    wget https://github.com/OleksandrCEO/SkySwitcher/archive/refs/heads/master.zip
+    wget https://github.com/OleksandrCEO/MagShift/archive/refs/heads/master.zip
     unzip -o master.zip
-    cd SkySwitcher-master
+    cd MagShift-master
     sudo ./install.sh
 
 ---
@@ -136,15 +136,15 @@ Since this tool relies on the graphical session (Wayland/X11), the most reliable
 1.  Open **System Settings** (Системні параметри) -> **Autostart** (Автозапуск).
 2.  Click **+ Add New** (+ Додати нове) -> **Application...** (Програма...).
     * *Do not select "Login Script".*
-3.  Type `skyswitcher` in the search bar and select it.
+3.  Type `magshift` in the search bar and select it.
 4.  *(Optional)* If you want to use a different layout switching hotkey, click on the added entry, then click **Properties** and modify the command:
-    * For Alt+Shift: `skyswitcher -k alt`
-    * For Ctrl+Shift: `skyswitcher -k ctrl`
-    * For CapsLock: `skyswitcher -k caps`
+    * For Alt+Shift: `magshift -k alt`
+    * For Ctrl+Shift: `magshift -k ctrl`
+    * For CapsLock: `magshift -k caps`
     * Default is Meta+Space (`-k meta`)
 5.  Click Apply (Гаразд).
 
-That's it! SkySwitcher will now start automatically with your user session.
+That's it! MagShift will now start automatically with your user session.
 
 ---
 

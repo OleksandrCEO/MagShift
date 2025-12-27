@@ -1,16 +1,16 @@
 # main.py
 
-# SkySwitcher v0.5.9 (fixed alt hotkey issue)
+# MagShift
 #
 # Architecture Overview:
-# SkySwitcher monitors physical keyboard input and performs layout switching
+# MagShift monitors physical keyboard input and performs layout switching
 # by emulating hotkeys (e.g., Meta+Space). This bypasses KDE's per-window
 # layout isolation which would otherwise prevent system-wide switching.
 #
 # Components:
 # - DeviceManager: Auto-detects keyboard devices
 # - InputBuffer: Tracks typed characters for replay after layout switch
-# - SkySwitcher: Main event loop and correction logic
+# - MagShift: Main event loop and correction logic
 
 import sys
 import time
@@ -19,7 +19,7 @@ import argparse
 from evdev import InputDevice, UInput, ecodes as e, list_devices
 
 # Configuration constants
-VERSION = "0.5.9"
+VERSION = "1.0.1"
 DOUBLE_PRESS_DELAY = 0.5  # seconds - max interval between double-press
 TYPING_TIMEOUT = 3.0      # seconds - buffer reset after inactivity
 MAX_BUFFER_SIZE = 100     # maximum tracked keystrokes
@@ -58,7 +58,7 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(logging.Formatter(fmt='%(message)s'))
 handler.format = _format_log_record
 
-logger = logging.getLogger("SkySwitcher")
+logger = logging.getLogger("MagShift")
 logger.addHandler(handler)
 
 # --- Helper for Logging ---
@@ -239,9 +239,9 @@ class InputBuffer:
 
 
 # --- Main Application ---
-class SkySwitcher:
+class MagShift:
     def __init__(self, device_path=None, switch_keys=None):
-        """Initialize SkySwitcher with input/output devices and state.
+        """Initialize MagShift with input/output devices and state.
 
         Args:
             device_path: Optional path to input device, auto-detects if None
@@ -271,7 +271,7 @@ class SkySwitcher:
 
         # Create virtual output device
         try:
-            self.ui = UInput({e.EV_KEY: self.uinput_keys}, name="SkySwitcher-Virtual")
+            self.ui = UInput({e.EV_KEY: self.uinput_keys}, name="MagShift-Virtual")
         except OSError as err:
             logger.error(f"[✗] Failed to create UInput device: {err}")
             sys.exit(1)
@@ -400,7 +400,7 @@ class SkySwitcher:
         - Keystroke buffering for correction replay
         - Graceful shutdown on Ctrl+C
         """
-        logger.info(f"[>] SkySwitcher v{VERSION}")
+        logger.info(f"[>] MagShift v{VERSION}")
 
         # Test device grab capability
         try:
@@ -455,7 +455,7 @@ class SkySwitcher:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="SkySwitcher - Super simple keyboard layout corrector")
+    parser = argparse.ArgumentParser(description="MagShift - Advanced Keyboard Layout Switcher with Instant Correction Engine")
 
     # Device argument
     parser.add_argument("-d", "--device", help="Path to input device (optional)")
@@ -489,4 +489,4 @@ if __name__ == "__main__":
     selected_keys = HOTKEY_STYLES[args.hotkey]
     logger.info(f"[i] Using hotkey style: {args.hotkey} -> {selected_keys}")
 
-    SkySwitcher(device_path=args.device, switch_keys=selected_keys).run()
+    MagShift(device_path=args.device, switch_keys=selected_keys).run()

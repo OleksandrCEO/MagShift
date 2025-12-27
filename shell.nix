@@ -7,7 +7,7 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
-    echo "SkySwitcher environment loaded."
+    echo "MagShift environment loaded."
     echo "Run: python3 main.py"
   '';
 }

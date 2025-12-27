@@ -1,7 +1,7 @@
 # flake.nix
 
 {
-  description = "SkySwitcher - Keyboard layout switcher for Linux";
+  description = "MagShift - Advanced Keyboard Layout Switcher with Instant Correction Engine";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
@@ -18,7 +18,7 @@
       # Package outputs for each system
       packages = forAllSystems (system: {
         default = import ./default.nix { pkgs = pkgsFor system; };
-        skyswitcher = self.packages.${system}.default;
+        magshift = self.packages.${system}.default;
       });
 
       # Development shell for each system
@@ -29,7 +29,7 @@
             evtest
           ];
           shellHook = ''
-            echo "SkySwitcher development environment"
+            echo "MagShift development environment"
             echo "Run: python3 main.py --verbose"
           '';
         };
@@ -37,7 +37,7 @@
 
       # NixOS module (system-independent)
       nixosModules.default = import ./module.nix;
-      nixosModules.skyswitcher = self.nixosModules.default;
+      nixosModules.magshift = self.nixosModules.default;
 
     };
 }
