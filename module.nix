@@ -21,12 +21,14 @@ in
     # We use 'uaccess' and 'seat' tags to grant R/W access
     # ONLY to the user currently logged into the active physical session.
     services.udev.extraRules = ''
-      # Grant access to create virtual input devices (uinput) to the active user
+      # 1. Virtual input device (uinput)
+      # We add 'uaccess' and ensure it's processed properly
       KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", TAG+="seat", ENV{ID_SEAT}="seat0", OPTIONS+="static_node=uinput"
 
-      # Grant access to read physical keyboard events to the active user
-      # IMPORT{builtin}="input_id" is often handled by default rules, but we ensure it's there
-      SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess", TAG+="seat", ENV{ID_SEAT}="seat0"
+      # 2. Physical keyboards
+      # We call 'input_id' explicitly to ensure ENV{ID_INPUT_KEYBOARD} is populated
+      # We also add a debug variable ENV{MAGSHIFT_ID}="1"
+      SUBSYSTEM=="input", KERNEL=="event*", IMPORT{builtin}="input_id", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess", TAG+="seat", ENV{ID_SEAT}="seat0", ENV{MAGSHIFT_ID}="1"
     '';
   };
 }
