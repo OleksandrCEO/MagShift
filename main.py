@@ -197,6 +197,12 @@ class InputBuffer:
                 self.buffer = []
         self.last_key_time = now
 
+        # Reset buffer on "end of typing" keys (Enter, Tab, Escape)
+        if keycode in [e.KEY_ENTER, e.KEY_TAB, e.KEY_ESC]:
+            if self.buffer:
+                self.buffer = []
+            return
+
         if keycode == e.KEY_BACKSPACE:
             if self.buffer:
                 self.buffer.pop()
