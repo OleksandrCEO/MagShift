@@ -217,29 +217,12 @@ class InputBuffer:
         """Extract the last typed phrase from buffer.
 
         Returns a list of (keycode, shift_pressed) tuples representing
-        the most recent word, including any leading spaces.
+        the entire buffer contents (all words and spaces).
 
         Returns:
             List of key tuples, or empty list if buffer is empty
         """
-        if not self.buffer:
-            return []
-
-        result = []
-        found_char = False
-
-        for item in reversed(self.buffer):
-            code, shift = item
-            if code == e.KEY_SPACE:
-                if found_char:
-                    break  # Stop at first space after finding characters
-                else:
-                    result.insert(0, item)  # Include leading spaces
-            else:
-                found_char = True
-                result.insert(0, item)
-
-        return result
+        return self.buffer.copy()
 
 
 # --- Main Application ---
