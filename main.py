@@ -220,11 +220,7 @@ class InputBuffer:
         """
         return self.buffer.copy()
 
-    # def clear(self):
-    #     """Force clear buffer."""
-    #     self.buffer = []
 
-# --- Main Application ---
 class MagShift:
     def __init__(self, device_path=None, switch_keys=None):
         """Initialize MagShift with input/output devices and state.
@@ -366,7 +362,7 @@ class MagShift:
             self.ui.syn()
             self.ui.write(e.EV_KEY, e.KEY_BACKSPACE, 0)
             self.ui.syn()
-            time.sleep(BACKSPACE_DELAY) # important delay
+            time.sleep(BACKSPACE_DELAY)
 
         # Switch layout
         self.perform_layout_switch()
