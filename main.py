@@ -22,7 +22,7 @@ MAX_BUFFER_SIZE = 100  # maximum tracked keystrokes
 HOTKEY_PRESS_DURATION = 0.05
 LAYOUT_SWITCH_SETTLE_TIME = 0.15
 KEY_REPLAY_DELAY = 0.005
-BACKSPACE_DELAY = 0.03
+BACKSPACE_DELAY = 0.005
 MODIFIER_RESET_DELAY = 0.05
 
 # Predefined switching styles
@@ -220,6 +220,9 @@ class InputBuffer:
         """
         return self.buffer.copy()
 
+    # def clear(self):
+    #     """Force clear buffer."""
+    #     self.buffer = []
 
 # --- Main Application ---
 class MagShift:
@@ -348,6 +351,9 @@ class MagShift:
         if not keys_to_replay:
             logger.debug("[!] Buffer empty.")
             return
+
+        # Clear buffer immediately to prevent double-correction (bad way for circular retyping)
+        # self.input_buffer.clear()
 
         self.reset_modifiers()
 
