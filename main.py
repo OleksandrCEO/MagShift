@@ -1,16 +1,10 @@
 # main.py
 
-# MagShift
+# MagShift v1.0.2 (Phrase retype support)
 #
 # Architecture Overview:
 # MagShift monitors physical keyboard input and performs layout switching
-# by emulating hotkeys (e.g., Meta+Space). This bypasses KDE's per-window
-# layout isolation which would otherwise prevent system-wide switching.
-#
-# Components:
-# - DeviceManager: Auto-detects keyboard devices
-# - InputBuffer: Tracks typed characters for replay after layout switch
-# - MagShift: Main event loop and correction logic
+# by emulating hotkeys.
 
 import sys
 import time
@@ -19,17 +13,17 @@ import argparse
 from evdev import InputDevice, UInput, ecodes as e, list_devices
 
 # Configuration constants
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 DOUBLE_PRESS_DELAY = 0.5  # seconds - max interval between double-press
-TYPING_TIMEOUT = 3.0      # seconds - buffer reset after inactivity
-MAX_BUFFER_SIZE = 100     # maximum tracked keystrokes
+TYPING_TIMEOUT = 3.0  # seconds - buffer reset after inactivity
+MAX_BUFFER_SIZE = 100  # maximum tracked keystrokes
 
-# Hardware timing delays (tuned for stability)
-HOTKEY_PRESS_DURATION = 0.05      # Hold duration for combo recognition
-LAYOUT_SWITCH_SETTLE_TIME = 0.15  # Wait for layout change to complete
-KEY_REPLAY_DELAY = 0.005          # Delay between replayed keystrokes
-BACKSPACE_DELAY = 0.002           # Delay between backspace events
-MODIFIER_RESET_DELAY = 0.05       # OS state update time
+# Hardware timing delays (TUNED FOR STABILITY)
+HOTKEY_PRESS_DURATION = 0.05
+LAYOUT_SWITCH_SETTLE_TIME = 0.15
+KEY_REPLAY_DELAY = 0.005
+BACKSPACE_DELAY = 0.03
+MODIFIER_RESET_DELAY = 0.05
 
 # Predefined switching styles
 HOTKEY_STYLES = {
@@ -177,7 +171,7 @@ class DeviceManager:
         sys.exit(1)
 
 
-# --- Input Buffer (From v0.4.9) ---
+# --- Input Buffer ---
 class InputBuffer:
     def __init__(self):
         self.buffer = []
@@ -192,12 +186,13 @@ class InputBuffer:
             is_shifted: Whether shift was pressed during keystroke
         """
         now = time.time()
+        # Clear by Timeout
         if (now - self.last_key_time) > TYPING_TIMEOUT:
             if self.buffer:
                 self.buffer = []
         self.last_key_time = now
 
-        # Reset buffer on "end of typing" keys (Enter, Tab, Escape)
+        # Clear by Enter/Tab/Esc - end of phrase
         if keycode in [e.KEY_ENTER, e.KEY_TAB, e.KEY_ESC]:
             if self.buffer:
                 self.buffer = []
@@ -208,6 +203,7 @@ class InputBuffer:
                 self.buffer.pop()
             return
 
+        # Use Spase as regular symbol
         if keycode == e.KEY_SPACE or keycode in self.trackable_range:
             self.buffer.append((keycode, is_shifted))
             if len(self.buffer) > MAX_BUFFER_SIZE:
@@ -248,7 +244,6 @@ class MagShift:
         else:
             self.device = DeviceManager.find_keyboard()
 
-        # Define virtual keyboard capabilities
         self.uinput_keys = [
             e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_RIGHTCTRL, e.KEY_RIGHTSHIFT,
             e.KEY_LEFTMETA, e.KEY_LEFTALT, e.KEY_BACKSPACE, e.KEY_SPACE,
@@ -260,10 +255,9 @@ class MagShift:
         try:
             self.ui = UInput({e.EV_KEY: self.uinput_keys}, name="MagShift-Virtual")
         except OSError as err:
-            logger.error(f"[✗] Failed to create UInput device: {err}")
+            logger.error(f"[✗] Failed to create UInput: {err}")
             sys.exit(1)
 
-        # Initialize buffer and state
         self.input_buffer = InputBuffer()
         self.last_press_time = 0
         self.trigger_released = True
@@ -352,10 +346,9 @@ class MagShift:
         """
         keys_to_replay = self.input_buffer.get_last_phrase()
         if not keys_to_replay:
-            logger.info("[!] Buffer empty.")
+            logger.debug("[!] Buffer empty.")
             return
 
-        # Release virtual modifiers
         self.reset_modifiers()
 
         readable_text = decode_keys(keys_to_replay)
@@ -367,7 +360,7 @@ class MagShift:
             self.ui.syn()
             self.ui.write(e.EV_KEY, e.KEY_BACKSPACE, 0)
             self.ui.syn()
-            time.sleep(BACKSPACE_DELAY)
+            time.sleep(BACKSPACE_DELAY) # important delay
 
         # Switch layout
         self.perform_layout_switch()
@@ -431,12 +424,13 @@ class MagShift:
                     elif event.value in [1, 2]:
                         if event.code != self.trigger_btn:
                             self.input_buffer.add(event.code, self.shift_pressed)
+
                         # Cancel pending action if other key pressed
                         if self.last_press_time > 0:
                             self.last_press_time = 0
 
         except KeyboardInterrupt:
-            print("\n[✓] Stopped by user.")
+            sys.stderr.write("\n[✓] Stopped by user.\n")
         except OSError as err:
             logger.error(f"[✗] Device error: {err}")
 
@@ -469,13 +463,14 @@ def main():
         sys.exit(0)
 
     if args.verbose:
-        logger.setLevel(logging.DEBUG)
-    else:
         logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.WARNING)
 
     # Resolve keys based on argument
     selected_keys = HOTKEY_STYLES[args.hotkey]
-    logger.info(f"[i] Using hotkey style: {args.hotkey} -> {selected_keys}")
+    if args.verbose:
+        logger.info(f"[i] Using hotkey style: {args.hotkey} -> {selected_keys}")
 
     MagShift(device_path=args.device, switch_keys=selected_keys).run()
 
