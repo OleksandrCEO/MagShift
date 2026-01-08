@@ -178,22 +178,13 @@ class InputBuffer:
         self.last_key_time = 0
         self.trackable_range = range(e.KEY_1, e.KEY_SLASH + 1)
 
-    def add(
-            self,
-            keycode: int,
-            is_shifted: bool,
-            ctrl_pressed: bool = False,
-            meta_pressed: bool = False,
-            alt_pressed: bool = False
-    ):
+    def add(self, keycode: int, is_shifted: bool, modifier_pressed: bool = False):
         """Add a keystroke to the buffer.
 
         Args:
             keycode: evdev key code
             is_shifted: Whether shift was pressed during keystroke
-            ctrl_pressed: Whether ctrl was pressed during keystroke
-            meta_pressed: Whether meta was pressed during keystroke
-            alt_pressed: Whether alt was pressed during keystroke
+            modifier_pressed: Whether any modifier (ctrl/meta/alt) was pressed
         """
         now = time.time()
         # Clear by Timeout
@@ -213,8 +204,10 @@ class InputBuffer:
                 self.buffer.pop()
             return
 
-        # Ignore hotkeys - don't add to buffer if any modifier is pressed
-        if ctrl_pressed or meta_pressed or alt_pressed:
+        # Clear buffer and ignore when hotkey is pressed (Ctrl+C, Alt+Tab, etc)
+        if modifier_pressed:
+            if self.buffer:
+                self.buffer = []
             return
 
         # Use Spase as regular symbol
@@ -448,7 +441,8 @@ class MagShift:
                     # Track other keys in buffer
                     elif event.value in [1, 2]:
                         if event.code != self.trigger_btn:
-                            self.input_buffer.add(event.code, self.shift_pressed, self.ctrl_pressed, self.meta_pressed, self.alt_pressed)
+                            modifier_pressed = self.ctrl_pressed or self.meta_pressed or self.alt_pressed
+                            self.input_buffer.add(event.code, self.shift_pressed, modifier_pressed)
 
                         # Cancel pending action if other key pressed
                         if self.last_press_time > 0:
