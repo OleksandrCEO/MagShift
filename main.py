@@ -16,7 +16,7 @@ from evdev import InputDevice, UInput, ecodes as e, list_devices
 VERSION = "1.0.2"
 DOUBLE_PRESS_DELAY = 0.5  # seconds - max interval between double-press
 TYPING_TIMEOUT = 1.5  # seconds - buffer reset after inactivity
-MAX_BUFFER_SIZE = 100  # maximum tracked keystrokes
+MAX_BUFFER_SIZE = 20  # maximum tracked keystrokes
 
 # Hardware timing delays (TUNED FOR STABILITY)
 HOTKEY_PRESS_DURATION = 0.05
