@@ -178,12 +178,22 @@ class InputBuffer:
         self.last_key_time = 0
         self.trackable_range = range(e.KEY_1, e.KEY_SLASH + 1)
 
-    def add(self, keycode: int, is_shifted: bool):
+    def add(
+            self,
+            keycode: int,
+            is_shifted: bool,
+            ctrl_pressed: bool = False,
+            meta_pressed: bool = False,
+            alt_pressed: bool = False
+    ):
         """Add a keystroke to the buffer.
 
         Args:
             keycode: evdev key code
             is_shifted: Whether shift was pressed during keystroke
+            ctrl_pressed: Whether ctrl was pressed during keystroke
+            meta_pressed: Whether meta was pressed during keystroke
+            alt_pressed: Whether alt was pressed during keystroke
         """
         now = time.time()
         # Clear by Timeout
@@ -201,6 +211,10 @@ class InputBuffer:
         if keycode == e.KEY_BACKSPACE:
             if self.buffer:
                 self.buffer.pop()
+            return
+
+        # Ignore hotkeys - don't add to buffer if any modifier is pressed
+        if ctrl_pressed or meta_pressed or alt_pressed:
             return
 
         # Use Spase as regular symbol
@@ -262,6 +276,9 @@ class MagShift:
         self.trigger_released = True
         self.trigger_btn = e.KEY_RIGHTSHIFT
         self.shift_pressed = False
+        self.ctrl_pressed = False
+        self.meta_pressed = False
+        self.alt_pressed = False
         self.pending_action = False
 
     def perform_layout_switch(self):
@@ -394,9 +411,15 @@ class MagShift:
         try:
             for event in self.device.read_loop():
                 if event.type == e.EV_KEY:
-                    # Track Shift state for proper case handling
+                    # Track modifier keys state
                     if event.code in [e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT]:
                         self.shift_pressed = (event.value == 1 or event.value == 2)
+                    elif event.code in [e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL]:
+                        self.ctrl_pressed = (event.value == 1 or event.value == 2)
+                    elif event.code in [e.KEY_LEFTMETA, e.KEY_RIGHTMETA]:
+                        self.meta_pressed = (event.value == 1 or event.value == 2)
+                    elif event.code in [e.KEY_LEFTALT]:  # e.KEY_RIGHTALT is important for Ґ
+                        self.alt_pressed = (event.value == 1 or event.value == 2)
 
                     # Handle trigger key (Right Shift)
                     if event.code == self.trigger_btn:
@@ -425,7 +448,7 @@ class MagShift:
                     # Track other keys in buffer
                     elif event.value in [1, 2]:
                         if event.code != self.trigger_btn:
-                            self.input_buffer.add(event.code, self.shift_pressed)
+                            self.input_buffer.add(event.code, self.shift_pressed, self.ctrl_pressed, self.meta_pressed, self.alt_pressed)
 
                         # Cancel pending action if other key pressed
                         if self.last_press_time > 0:
