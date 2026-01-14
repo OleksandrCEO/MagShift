@@ -1,10 +1,10 @@
 # main.py
 
-# MagShift v1.0.2 (Phrase retype support)
+# MagShift v1.0.3 (Added Force NumLock)
 #
 # Architecture Overview:
-# MagShift monitors physical keyboard input and performs layout switching
-# by emulating hotkeys.
+# MagShift monitors physical keyboard input and performs layout switching by emulating hotkeys.
+# Can also force NumLock state.
 
 import sys
 import time
@@ -13,7 +13,7 @@ import argparse
 from evdev import InputDevice, UInput, ecodes as e, list_devices
 
 # Configuration constants
-VERSION = "1.0.2"
+VERSION = "1.0.5"
 DOUBLE_PRESS_DELAY = 0.4  # seconds - max interval between double-press
 TYPING_TIMEOUT = 1  # seconds - buffer reset after inactivity
 MAX_BUFFER_SIZE = 20  # maximum tracked keystrokes
@@ -194,7 +194,7 @@ class InputBuffer:
         self.last_key_time = now
 
         # Clear by Enter/Tab/Esc - end of phrase
-        if keycode in [e.KEY_ENTER, e.KEY_TAB, e.KEY_ESC]:
+        if keycode in [e.KEY_ENTER, e.KEY_KPENTER, e.KEY_TAB, e.KEY_ESC]:
             if self.buffer:
                 self.buffer = []
             return
@@ -253,11 +253,10 @@ class MagShift:
         self.uinput_keys = [
             e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_RIGHTCTRL, e.KEY_RIGHTSHIFT,
             e.KEY_LEFTMETA, e.KEY_LEFTALT, e.KEY_BACKSPACE, e.KEY_SPACE,
-            e.KEY_CAPSLOCK, e.KEY_TAB,
+            e.KEY_CAPSLOCK, e.KEY_TAB, e.KEY_NUMLOCK,  # Explicitly added
             *range(e.KEY_ESC, e.KEY_MICMUTE)
         ]
 
-        # Create virtual output device
         try:
             self.ui = UInput({e.EV_KEY: self.uinput_keys}, name="MagShift-Virtual")
         except OSError as err:
@@ -273,6 +272,27 @@ class MagShift:
         self.meta_pressed = False
         self.alt_pressed = False
         self.pending_action = False
+
+    def ensure_numlock_state(self):
+        """Checks physical LED state and forces NumLock ON if currently OFF."""
+        try:
+            # Active LEDs are returned as a list of integers
+            active_leds = self.device.leds(verbose=False)
+
+            # e.LED_NUML is the code for NumLock LED
+            if e.LED_NUML not in active_leds:
+                logger.info("[i] NumLock is OFF. Forcing ON...")
+                # Press NumLock
+                self.ui.write(e.EV_KEY, e.KEY_NUMLOCK, 1)
+                self.ui.syn()
+                # Release NumLock
+                self.ui.write(e.EV_KEY, e.KEY_NUMLOCK, 0)
+                self.ui.syn()
+            else:
+                logger.info("[✓] NumLock is already ON.")
+
+        except Exception as err:
+            logger.warning(f"[!] Could not check/set LEDs: {err}")
 
     def perform_layout_switch(self):
         """Switch keyboard layout using configured hotkey combination.
@@ -467,13 +487,10 @@ def main():
     # List devices argument
     parser.add_argument("--list", action="store_true", help="List available devices")
 
-    # Hotkey argument
-    parser.add_argument(
-        "-k", "--hotkey",
-        choices=HOTKEY_STYLES.keys(),
-        default="meta",
-        help="Layout switching key combination (default: meta)"
-    )
+    # New argument to just force NumLock
+    parser.add_argument("-n", "--numlock", action="store_true", help="Force NumLock ON and exit")
+
+    parser.add_argument("-k", "--hotkey", choices=HOTKEY_STYLES.keys(), default="meta", help="Hotkey style")
 
     args = parser.parse_args()
 
@@ -492,6 +509,14 @@ def main():
         logger.info(f"[i] Using hotkey style: {args.hotkey} -> {selected_keys}")
 
     MagShift(device_path=args.device, switch_keys=selected_keys).run()
+
+    # If --NumLock is passed, just do that and exit
+    if args.numlock:
+        app.ensure_numlock_state()
+        sys.exit(0)
+
+    # Otherwise run the full listener
+    app.run()
 
 
 if __name__ == "__main__":
