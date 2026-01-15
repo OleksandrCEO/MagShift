@@ -478,19 +478,13 @@ def main():
     """Main entry point for MagShift application."""
     parser = argparse.ArgumentParser(description="MagShift - Advanced Keyboard Layout Switcher with Instant Correction Engine")
 
-    # Device argument
     parser.add_argument("-d", "--device", help="Path to input device (optional)")
-
-    # Logging argument
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
-
-    # List devices argument
     parser.add_argument("--list", action="store_true", help="List available devices")
-
-    # New argument to just force NumLock
-    parser.add_argument("-n", "--numlock", action="store_true", help="Force NumLock ON and exit")
-
     parser.add_argument("-k", "--hotkey", choices=HOTKEY_STYLES.keys(), default="meta", help="Hotkey style")
+
+    parser.add_argument("-n", "--numlock", action="store_true", help="Force NumLock ON and exit")
+    parser.add_argument("--auto-numlock", action="store_true", help="Enable NumLock on start (for service mode)")
 
     args = parser.parse_args()
 
@@ -511,8 +505,10 @@ def main():
     app = MagShift(device_path=args.device, switch_keys=selected_keys)
 
     # If --NumLock is passed, just do that and exit
-    if args.numlock:
+    if args.auto_numlock or args.numlock:
         app.ensure_numlock_state()
+
+    if args.numlock:
         sys.exit(0)
 
     # Otherwise run the full listener
