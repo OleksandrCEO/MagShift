@@ -508,7 +508,7 @@ def main():
     if args.verbose:
         logger.info(f"[i] Using hotkey style: {args.hotkey} -> {selected_keys}")
 
-    app = MagShift(device_path=args.device, switch_keys=selected_keys).run()
+    app = MagShift(device_path=args.device, switch_keys=selected_keys)
 
     # If --NumLock is passed, just do that and exit
     if args.numlock:
