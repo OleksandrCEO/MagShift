@@ -51,7 +51,7 @@ in
     };
 
     # use it like:
-    # systemd.services.magshift.enable = true;`
+    # systemd.services.magshift.enable = true;
     # systemd.services.magshift.autoNumlock = false;
   };
 }
