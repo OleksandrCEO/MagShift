@@ -19,6 +19,13 @@ in
 {
   options.services.magshift = {
     enable = lib.mkEnableOption "MagShift package and dynamic permissions";
+
+    # auto num lock feature for cases when system does not supports it for some reason
+    autoNumlock = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Automatically force NumLock on service start.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -28,8 +35,23 @@ in
     # 2. Enable kernel module
     hardware.uinput.enable = true;
 
-    # 3. Inject rules via packages mechanism (controlled ordering)
-    # Замість extraRules використовуємо udev.packages
+    # 3. Inject rules
     services.udev.packages = [ magshiftUdevRules ];
+
+    # 4. Systemd Service definition
+    systemd.services.magshift = {
+      description = "MagShift Keyboard Service";
+      wantedBy = [ "multi-user.target" ];
+
+      serviceConfig = {
+        ExecStart = "${pkgs.magshift}/bin/magshift" + (if cfg.autoNumlock then " --auto-numlock" else "");
+        Restart = "always";
+        RestartSec = "3";
+      };
+    };
+
+    # use it like:
+    # systemd.services.magshift.enable = true;`
+    # systemd.services.magshift.autoNumlock = false;
   };
 }
