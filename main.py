@@ -425,12 +425,25 @@ class MagShift:
             for event in self.device.read_loop():
                 if event.type == e.EV_KEY:
                     # Track modifier keys state
-                    if event.code in [e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT]:
+                    if event.code in [e.KEY_LEFTMETA, e.KEY_RIGHTMETA]:
+                        self.meta_pressed = (event.value == 1 or event.value == 2)
+                        if event.value == 1:  # On press only
+                            self.input_buffer.buffer = []  # Clear buffer immediately
+                            # logger.debug("[i] Meta pressed: Buffer cleared")
+
+                    elif event.code == e.KEY_CAPSLOCK:
+                        if event.value == 1:  # On press only
+                            self.input_buffer.buffer = []  # Clear buffer immediately
+                            # logger.debug("[i] CapsLock pressed: Buffer cleared")
+
+                    elif event.code in [e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT]:
                         self.shift_pressed = (event.value == 1 or event.value == 2)
                     elif event.code in [e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL]:
                         self.ctrl_pressed = (event.value == 1 or event.value == 2)
-                    elif event.code in [e.KEY_LEFTMETA, e.KEY_RIGHTMETA]:
-                        self.meta_pressed = (event.value == 1 or event.value == 2)
+
+                    # elif event.code in [e.KEY_LEFTMETA, e.KEY_RIGHTMETA]:
+                    #     self.meta_pressed = (event.value == 1 or event.value == 2)
+
                     elif event.code in [e.KEY_LEFTALT]:  # e.KEY_RIGHTALT is important for Ґ
                         self.alt_pressed = (event.value == 1 or event.value == 2)
 
