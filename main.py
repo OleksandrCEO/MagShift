@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # main.py
 
 # MagShift v1.0.3 (Added Force NumLock)
