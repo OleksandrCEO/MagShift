@@ -145,6 +145,52 @@ Since this tool relies on the graphical session (Wayland/X11), the most reliable
 
 That's it! MagShift will now start automatically with your user session.
 
+## Autostart (as a Systemd User Service)
+
+To ensure **MagShift** runs automatically and remains stable on systems like Ubuntu, follow these steps to configure it as a `systemd` user service.
+
+## 1. Create the Service File
+Create the service configuration file in your user directory:
+
+    mkdir -p ~/.config/systemd/user
+    nano ~/.config/systemd/user/magshift.service
+
+Paste the following content into the file:
+
+    [Unit]
+    Description=MagShift Keyboard Layout Switcher
+    After=graphical-session.target
+
+    [Service]
+    # Ensure the path points to your installed executable
+    ExecStart=/usr/local/bin/magshift
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=default.target
+
+## 2. Enable and Start the Service
+Apply the changes and activate the service:
+
+    # Reload the systemd user manager configuration
+    systemctl --user daemon-reload
+
+    # Enable the service to start automatically on login
+    systemctl --user enable magshift.service
+
+    # Start the service immediately
+    systemctl --user start magshift.service
+
+## 3. Verify Status and Logs
+To check if the service is running correctly, use:
+
+    systemctl --user status magshift.service
+
+To view real-time logs for debugging purposes:
+
+    journalctl --user -u magshift -f
+
 ---
 
 ## 🛠️ Manual Usage (Development)
