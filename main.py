@@ -267,7 +267,7 @@ class MagShift:
         self.input_buffer = InputBuffer()
         self.last_press_time = 0
         self.trigger_released = True
-        self.trigger_btn = e.KEY_RIGHTSHIFT
+        self.trigger_btn = (e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT)
         self.shift_pressed = False
         self.ctrl_pressed = False
         self.meta_pressed = False
@@ -449,7 +449,7 @@ class MagShift:
                         self.alt_pressed = (event.value == 1 or event.value == 2)
 
                     # Handle trigger key (Right Shift)
-                    if event.code == self.trigger_btn:
+                    if event.code in self.trigger_btn:
 
                         # Key press
                         if event.value == 1:
@@ -474,7 +474,7 @@ class MagShift:
 
                     # Track other keys in buffer
                     elif event.value in [1, 2]:
-                        if event.code != self.trigger_btn:
+                        if event.code not in self.trigger_btn:
                             modifier_pressed = self.ctrl_pressed or self.meta_pressed or self.alt_pressed
                             self.input_buffer.add(event.code, self.shift_pressed, modifier_pressed)
 
