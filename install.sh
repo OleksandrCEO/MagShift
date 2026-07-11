@@ -98,9 +98,7 @@ fi
 # ==============================================================================
 log_info "Installing MagShift binary..."
 
-# main.py is a shebang-less module (Nix adds its own); prepend one here so the
-# installed copy is runnable standalone as /usr/local/bin/magshift.
-{ echo '#!/usr/bin/env python3'; cat "$SOURCE_FILE"; } > "$INSTALL_DIR/$SCRIPT_NAME"
+cp "$SOURCE_FILE" "$INSTALL_DIR/$SCRIPT_NAME"
 chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
 
 log_success "Installed to $INSTALL_DIR/$SCRIPT_NAME"
