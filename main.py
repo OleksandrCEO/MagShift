@@ -11,6 +11,7 @@ import sys
 import time
 import logging
 import argparse
+import select
 from evdev import InputDevice, UInput, ecodes as e, list_devices
 
 # Configuration constants
@@ -228,6 +229,54 @@ class InputBuffer:
         """
         return self.buffer.copy()
 
+    def get_last_word(self) -> list[tuple[int, bool]]:
+        """Return the current word after the last space, if any."""
+        for index in range(len(self.buffer) - 1, -1, -1):
+            if self.buffer[index][0] == e.KEY_SPACE:
+                return self.buffer[index + 1 :]
+        return self.buffer.copy()
+
+
+class ShiftTapDetector:
+    """Classify single, double, and triple taps of a Shift key."""
+
+    def __init__(self, delay: float = DOUBLE_PRESS_DELAY):
+        self.delay = delay
+        self.count = 0
+        self.deadline = None
+
+    def press(self, now: float) -> str | None:
+        """Register a press; triple taps resolve immediately."""
+        if self.deadline is None or now > self.deadline:
+            self.count = 1
+        else:
+            self.count += 1
+        self.deadline = now + self.delay
+        if self.count >= 3:
+            self._reset()
+            return "phrase"
+        return None
+
+    def release(self) -> None:
+        """Kept for callers that need an explicit press/release state."""
+
+    def flush(self, now: float) -> str | None:
+        """Resolve a completed double tap after the triple-tap window."""
+        if self.deadline is None or now <= self.deadline:
+            return None
+        action = "word" if self.count == 2 else None
+        self._reset()
+        return action
+
+    def time_until_expiry(self, now: float) -> float | None:
+        if self.deadline is None:
+            return None
+        return max(0.0, self.deadline - now)
+
+    def _reset(self) -> None:
+        self.count = 0
+        self.deadline = None
+
 
 class MagShift:
     def __init__(self, device_path=None, switch_keys=None):
@@ -265,14 +314,13 @@ class MagShift:
             sys.exit(1)
 
         self.input_buffer = InputBuffer()
-        self.last_press_time = 0
+        self.shift_taps = ShiftTapDetector()
         self.trigger_released = True
         self.trigger_btn = (e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT)
         self.shift_pressed = False
         self.ctrl_pressed = False
         self.meta_pressed = False
         self.alt_pressed = False
-        self.pending_action = False
 
     def ensure_numlock_state(self):
         """Checks physical LED state and forces NumLock ON if currently OFF."""
@@ -365,8 +413,8 @@ class MagShift:
         # Allow OS time to update keyboard state before sending backspace
         time.sleep(MODIFIER_RESET_DELAY)
 
-    def fix_last_word(self):
-        """Correct the last typed phrase by switching layout.
+    def fix_text(self, keys_to_replay):
+        """Correct a selected portion of the buffered text.
 
         Process:
         1. Release all modifier keys to prevent interference
@@ -374,7 +422,6 @@ class MagShift:
         3. Switch keyboard layout
         4. Replay the phrase in new layout
         """
-        keys_to_replay = self.input_buffer.get_last_phrase()
         if not keys_to_replay:
             logger.debug("[!] Buffer empty.")
             return
@@ -401,6 +448,20 @@ class MagShift:
         # Replay in new layout
         self.replay_keys(keys_to_replay)
 
+    def fix_last_word(self):
+        """Correct only the word currently being typed."""
+        self.fix_text(self.input_buffer.get_last_word())
+
+    def fix_last_phrase(self):
+        """Correct the complete buffered phrase."""
+        self.fix_text(self.input_buffer.get_last_phrase())
+
+    def resolve_shift_action(self, action):
+        if action == "word":
+            self.fix_last_word()
+        elif action == "phrase":
+            self.fix_last_phrase()
+
     def run(self):
         """Main event loop for keyboard monitoring and correction.
 
@@ -423,7 +484,17 @@ class MagShift:
             pass
 
         try:
-            for event in self.device.read_loop():
+            while True:
+                now = time.monotonic()
+                timeout = self.shift_taps.time_until_expiry(now)
+                ready, _, _ = select.select([self.device.fd], [], [], timeout)
+                if not ready:
+                    self.resolve_shift_action(self.shift_taps.flush(time.monotonic()))
+                    continue
+
+                event = self.device.read_one()
+                if event is None:
+                    continue
                 if event.type == e.EV_KEY:
                     # Track modifier keys state
                     if event.code in [e.KEY_LEFTMETA, e.KEY_RIGHTMETA]:
@@ -448,29 +519,19 @@ class MagShift:
                     elif event.code in [e.KEY_LEFTALT]:  # e.KEY_RIGHTALT is important for Ґ
                         self.alt_pressed = (event.value == 1 or event.value == 2)
 
-                    # Handle trigger key (Right Shift)
+                    # Handle trigger keys. Two taps fix the current word;
+                    # three taps fix the complete buffered phrase.
                     if event.code in self.trigger_btn:
 
                         # Key press
                         if event.value == 1:
-                            now = time.time()
-                            if (now - self.last_press_time < DOUBLE_PRESS_DELAY) and self.trigger_released:
-                                self.pending_action = True
-                                self.last_press_time = 0
-                            else:
-                                self.last_press_time = now
-                                self.pending_action = False
-
-                            self.trigger_released = False
+                            if self.trigger_released:
+                                self.resolve_shift_action(self.shift_taps.press(time.monotonic()))
+                                self.trigger_released = False
 
                         # Key release
                         elif event.value == 0:
                             self.trigger_released = True
-
-                            # Execute correction on double-press
-                            if self.pending_action:
-                                self.fix_last_word()
-                                self.pending_action = False
 
                     # Track other keys in buffer
                     elif event.value in [1, 2]:
