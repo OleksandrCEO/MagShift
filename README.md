@@ -16,8 +16,8 @@ Also supports other Linux distros via a simple installer script. For example:
 
 ## ✨ Features
 
-* **⚡ Double Right Shift:** Tap `Right Shift` twice to switch layout (e.g., English ↔ Ukrainian).
-* **🖋️ Auto-Correction:** It automatically corrects the **last typed phrase** when you switch.
+* **⚡ Double/Triple Shift:** Tap either `Left Shift` or `Right Shift` twice to correct the current word; tap it three times to correct the complete buffered phrase and switch layout (e.g., English ↔ Ukrainian). With no buffered text, either gesture only switches layout.
+* **🖋️ Auto-Correction:** It corrects the last word or complete phrase without a separate correction key, and the same text can be toggled back.
 * **🔒 Secure:** Runs with dynamic permissions (via Udev ACLs), no manual group configuration required.
 * **❄️ Pure Nix:** Zero global dependencies. Builds cleanly from the Nix Store.
 
