@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
-**MagShift** - Advanced Keyboard Layout Switcher with Instant Correction Engine for Linux (Wayland & X11). It fixes what you just typed without making you retype it.
+**MagShift** - Advanced Keyboard Layout Switcher with Instant Correction Engine for Linux (Wayland & X11) and macOS. It fixes what you just typed without making you retype it.
 
 Designed with **NixOS Flakes** in mind for reproducible and secure deployment. 
 
@@ -14,12 +14,17 @@ Also supports other Linux distros via a simple installer script. For example:
 [![Fedora](https://img.shields.io/badge/Fedora-Supported-51A2DA?style=flat&logo=fedora&logoColor=white)](#-installation-ubuntu--fedora--arch)
 [![Arch](https://img.shields.io/badge/Arch-Supported-1793D1?style=flat&logo=archlinux&logoColor=white)](#-installation-ubuntu--fedora--arch)
 
+And on macOS:
+
+[![macOS](https://img.shields.io/badge/macOS-12+-000000?style=flat&logo=apple&logoColor=white)](#-installation-macos)
+
 ## ✨ Features
 
 * **⚡ Double Right Shift:** Tap `Right Shift` twice to switch layout (e.g., English ↔ Ukrainian).
 * **🖋️ Auto-Correction:** It automatically corrects the **last typed phrase** when you switch.
 * **🔒 Secure:** Runs with dynamic permissions (via Udev ACLs), no manual group configuration required.
 * **❄️ Pure Nix:** Zero global dependencies. Builds cleanly from the Nix Store.
+* **🍎 macOS Native:** Uses a Quartz event tap and the Text Input Source API - no hotkey emulation, no extra daemons.
 
 
 
@@ -128,6 +133,63 @@ To update to the latest version, simply download and run the installer again:
 
 ---
 
+## 🍎 Installation (macOS)
+
+macOS 12 or newer, Intel or Apple Silicon. No `sudo` needed - everything is installed under your home directory.
+
+### Quick Install
+
+    git clone https://github.com/OleksandrCEO/MagShift.git
+    cd MagShift
+    ./install-macos.sh
+
+The installer will:
+1. Create a private virtualenv in `~/.local/share/magshift/venv` and install `pyobjc-framework-Quartz`
+2. Copy `main.py` next to it and add a `magshift` wrapper to `~/.local/bin`
+3. Register a LaunchAgent (`com.magwer.magshift`) that starts MagShift with your session
+
+### Grant Permissions (required)
+
+macOS will not let any process read or inject keystrokes until you allow it. Open
+**System Settings → Privacy & Security** and add the venv Python binary to **both** lists:
+
+    ~/.local/share/magshift/venv/bin/python3
+
+1. **Input Monitoring** - lets MagShift see what you type
+2. **Accessibility** - lets MagShift type the correction back
+
+> In the file picker press `Cmd+Shift+G` and paste the path. The installer prints the exact
+> absolute path at the end of its run.
+
+Then restart the agent:
+
+    launchctl kickstart -k gui/$UID/com.magwer.magshift
+
+### Verify
+
+    tail -f ~/.local/share/magshift/magshift.log
+
+Type a word in the wrong layout, tap **Shift** twice, and it should be retyped correctly.
+
+### Update / Uninstall
+
+    git pull && ./install-macos.sh      # update
+    ./install-macos.sh --uninstall      # remove agent, venv and wrapper
+
+### macOS differences
+
+| Option | Behaviour on macOS |
+|---|---|
+| `-k / --hotkey` | Ignored. Layouts are switched directly through `TISSelectInputSource`, so no hotkey has to be configured or emulated. |
+| `-d / --device` | Ignored. The Quartz event tap is system-wide; there is no per-device capture. |
+| `-n / --numlock`, `--auto-numlock` | Ignored. Mac keyboards have no NumLock. |
+| `--list` | Lists the enabled keyboard layouts instead of input devices. |
+
+Layouts are cycled in the order shown by `magshift --list`, which matches the order of your
+input sources in System Settings.
+
+---
+
 ## 🤖 Autostart (KDE Plasma)
 
 Since this tool relies on the graphical session (Wayland/X11), the most reliable way to start it is via KDE settings.
@@ -206,13 +268,16 @@ If you want to run it manually for debugging or development:
     # List available input devices (keyboards)
     python3 main.py --list
 
-    # Use a different layout switching hotkey
+    # Run the platform-neutral self-check (works on Linux and macOS)
+    python3 test_magshift.py
+
+    # Use a different layout switching hotkey (Linux only)
     python3 main.py -k alt    # Alt+Shift (default in many Linux DEs)
     python3 main.py -k meta   # Meta+Space (default, KDE-style)
     python3 main.py -k ctrl   # Ctrl+Shift
     python3 main.py -k caps   # CapsLock
 
-Available hotkey styles:
+Available hotkey styles (Linux only):
 - `alt` - Left Alt + Left Shift (common on GNOME/XFCE)
 - `meta` - Left Meta (Windows key) + Space (default, KDE standard)
 - `ctrl` - Left Ctrl + Left Shift

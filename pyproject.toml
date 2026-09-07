@@ -4,10 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "magshift"
-version = "1.0.1"
-description = "Context-aware keyboard layout switcher for Linux"
+version = "1.1.0"
+description = "Context-aware keyboard layout switcher for Linux and macOS"
 authors = [{ name = "Oleksandr Moiseiuk", email = "support@magwer.com" }]
-dependencies = ["evdev>=1.6.0"]
+dependencies = [
+    "evdev>=1.6.0; sys_platform == 'linux'",
+    "pyobjc-framework-Quartz>=9.0; sys_platform == 'darwin'",
+]
 requires-python = ">=3.10"
 
 [project.scripts]
