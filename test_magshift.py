@@ -7,6 +7,7 @@ machine through a recording fake backend.
     python3 test_magshift.py
 """
 
+import sys
 import time
 
 import main
@@ -45,18 +46,7 @@ class FakeBackend:
 
 
 def make_app():
-    app = MagShift.__new__(MagShift)
-    app.backend = FakeBackend()
-    app.input_buffer = InputBuffer()
-    app.last_press_time = 0
-    app.trigger_released = True
-    app.trigger_btn = (main.KEY_LEFTSHIFT, main.KEY_RIGHTSHIFT)
-    app.shift_pressed = False
-    app.ctrl_pressed = False
-    app.meta_pressed = False
-    app.alt_pressed = False
-    app.pending_action = False
-    return app
+    return MagShift(FakeBackend())
 
 
 def tap(app, code):
@@ -241,6 +231,8 @@ def test_linux_backend_emits_expected_uinput_sequence():
 
 
 def test_running_binary_is_real_file():
+    if sys.platform != 'darwin':
+        return  # on Linux `ps -o comm=` prints a bare name, and the path is only used in macOS messages
     import os
     assert os.path.isfile(main._running_binary()), main._running_binary()
 
@@ -257,7 +249,7 @@ def test_switcher_prefers_previous_layout():
     state = {'cur': 'uk'}
     sw.current_id = lambda: state['cur']
     sw.layouts = lambda: [('RU', 'ru', 'Russian'), ('UK', 'uk', 'Ukrainian'), ('US', 'us', 'U.S.')]
-    sw._seen, sw._previous = 'uk', None
+    sw._seen, sw._previous, sw._list = 'uk', None, None
 
     state['cur'] = 'us'
     sw.note_current()               # user switched Ukrainian -> U.S.

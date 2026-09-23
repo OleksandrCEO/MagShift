@@ -68,8 +68,9 @@ mkdir -p "$PREFIX" "$BIN_DIR"
 python3 -m venv --copies "$PREFIX/venv"
 
 VENV_PY="$PREFIX/venv/bin/python3"
+cp "$SOURCE_FILE" "$PREFIX/magshift.py"
 # The binary that actually runs - and the one TCC checks.
-TCC_BIN="$("$VENV_PY" -c 'import os, subprocess; print(subprocess.run(["ps", "-o", "comm=", "-p", str(os.getpid())], capture_output=True, text=True).stdout.strip())')"
+TCC_BIN="$(cd "$PREFIX" && "$VENV_PY" -c 'import magshift; print(magshift._running_binary())')"
 [ -x "$TCC_BIN" ] || TCC_BIN="$VENV_PY"
 "$VENV_PY" -m pip install --upgrade --quiet pip
 "$VENV_PY" -m pip install --quiet "pyobjc-framework-Quartz>=9.0"
@@ -80,8 +81,6 @@ log_success "Dependencies installed"
 # Installing Executable
 # ==============================================================================
 log_info "Installing MagShift..."
-
-cp "$SOURCE_FILE" "$PREFIX/magshift.py"
 
 cat > "$BIN_DIR/magshift" <<WRAPPER
 #!/bin/bash

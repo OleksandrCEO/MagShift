@@ -193,8 +193,8 @@ Type a word in the wrong layout, tap **Shift** twice, and it should be retyped c
 | `-n / --numlock`, `--auto-numlock` | Ignored. Mac keyboards have no NumLock. |
 | `--list` | Lists the enabled keyboard layouts instead of input devices. |
 
-Layouts are cycled in the order shown by `magshift --list`, which matches the order of your
-input sources in System Settings.
+MagShift switches to the layout you used before the current one, so a second double-Shift undoes the
+correction. When no previous layout is known yet it takes the next one in `magshift --list` order.
 
 ---
 

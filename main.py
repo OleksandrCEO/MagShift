@@ -456,6 +456,7 @@ class InputSourceSwitcher:
         self.prop_type = c_void_p.in_dll(self.carbon, 'kTISPropertyInputSourceType')
         self.type_layout = c_void_p.in_dll(self.carbon, 'kTISTypeKeyboardLayout')
 
+        self._list = None
         self._seen = self.current_id()
         self._previous = None
 
@@ -476,6 +477,8 @@ class InputSourceSwitcher:
         The returned CFArray is kept alive on the instance: the source pointers
         are borrowed from it and would dangle if it were released.
         """
+        if self._list:
+            self.cf.CFRelease(self._list)
         self._list = self.carbon.TISCreateInputSourceList(None, False)
         result = []
         if not self._list:
@@ -531,6 +534,7 @@ class InputSourceSwitcher:
             return None
         logger.info(f"[i] Layout -> {target_name} ({target_id})")
         return target_id
+
 
 def _running_binary():
     """Path macOS privacy checks apply to. A framework Python re-execs Python.app,
@@ -719,9 +723,9 @@ class MacBackend:
             logger.warning("[!] Accessibility is not granted - corrections will be silently dropped.")
             logger.warning(f"    System Settings -> Privacy & Security -> Accessibility -> {_running_binary()}")
 
-        mask = (q.CGEventMaskBit(q.kCGEventKeyDown)
-                | q.CGEventMaskBit(q.kCGEventKeyUp)
-                | q.CGEventMaskBit(q.kCGEventFlagsChanged))
+        mask = 0
+        for event_type in (q.kCGEventKeyDown, q.kCGEventKeyUp, q.kCGEventFlagsChanged):
+            mask |= q.CGEventMaskBit(event_type)
 
         self.tap = q.CGEventTapCreate(
             q.kCGSessionEventTap,
@@ -757,18 +761,8 @@ class MacBackend:
             q.CGEventTapEnable(self.tap, False)
 
 
-def create_backend(device_path=None, switch_keys=None):
-    """Return the backend for the current platform."""
-    if sys.platform == 'darwin':
-        return MacBackend(device_path=device_path, switch_keys=switch_keys)
-    if sys.platform.startswith('linux'):
-        return LinuxBackend(device_path=device_path, switch_keys=switch_keys)
-    logger.error(f"[✗] Unsupported platform: {sys.platform}")
-    sys.exit(1)
-
-
 def backend_class():
-    """Return the backend class without constructing it (for --list)."""
+    """Return the backend class for the current platform."""
     if sys.platform == 'darwin':
         return MacBackend
     if sys.platform.startswith('linux'):
@@ -782,14 +776,13 @@ def backend_class():
 # ==============================================================================
 
 class MagShift:
-    def __init__(self, device_path=None, switch_keys=None):
+    def __init__(self, backend):
         """Initialize MagShift with a platform backend and state.
 
         Args:
-            device_path: Optional path to input device (Linux only)
-            switch_keys: Optional list of key codes for layout switching hotkey
+            backend: LinuxBackend, MacBackend or any object with the same methods
         """
-        self.backend = create_backend(device_path=device_path, switch_keys=switch_keys)
+        self.backend = backend
 
         self.input_buffer = InputBuffer()
         self.last_press_time = 0
@@ -935,7 +928,7 @@ def main():
     if args.verbose:
         logger.info(f"[i] Using hotkey style: {args.hotkey} -> {selected_keys}")
 
-    app = MagShift(device_path=args.device, switch_keys=selected_keys)
+    app = MagShift(backend_class()(device_path=args.device, switch_keys=selected_keys))
 
     # If --NumLock is passed, just do that and exit
     if args.auto_numlock or args.numlock:
