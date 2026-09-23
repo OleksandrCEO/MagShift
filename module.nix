@@ -26,6 +26,18 @@ in
       default = true;
       description = "Automatically force NumLock on service start.";
     };
+
+    hotkey = lib.mkOption {
+      type = lib.types.enum [ "meta" "alt" "ctrl" "caps" "menu" ];
+      default = "meta";
+      description = "Layout switch hotkey your desktop uses, so MagShift can emulate it (passed as -k).";
+    };
+
+    pause = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Also correct on a single Pause press, Punto Switcher style (passed as -p).";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -44,14 +56,18 @@ in
       wantedBy = [ "multi-user.target" ];
 
       serviceConfig = {
-        ExecStart = "${pkgs.magshift}/bin/magshift" + (if cfg.autoNumlock then " --auto-numlock" else "");
+        ExecStart = lib.concatStringsSep " " ([ "${pkgs.magshift}/bin/magshift" "-k" cfg.hotkey ]
+          ++ lib.optional cfg.autoNumlock "--auto-numlock"
+          ++ lib.optional cfg.pause "-p");
         Restart = "always";
         RestartSec = "3";
       };
     };
 
     # use it like:
-    # systemd.services.magshift.enable = true;
-    # systemd.services.magshift.autoNumlock = false;
+    # services.magshift.enable = true;
+    # services.magshift.hotkey = "alt";
+    # services.magshift.pause = true;
+    # services.magshift.autoNumlock = false;
   };
 }
