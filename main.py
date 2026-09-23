@@ -50,6 +50,7 @@ KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_N, KEY_M = 44, 45, 46, 47, 48, 49, 50
 KEY_COMMA, KEY_DOT, KEY_SLASH, KEY_RIGHTSHIFT = 51, 52, 53, 54
 KEY_LEFTALT, KEY_SPACE, KEY_CAPSLOCK = 56, 57, 58
 KEY_NUMLOCK = 69
+KEY_PAUSE, KEY_COMPOSE = 119, 127  # Pause/Break and the Menu key
 KEY_KPENTER, KEY_RIGHTCTRL, KEY_RIGHTALT = 96, 97, 100
 KEY_LEFTMETA, KEY_RIGHTMETA = 125, 126
 KEY_MICMUTE = 248  # upper bound of the uinput key range on Linux
@@ -60,6 +61,7 @@ HOTKEY_STYLES = {
     "meta": [KEY_LEFTMETA, KEY_SPACE],  # Default
     "caps": [KEY_CAPSLOCK],
     "ctrl": [KEY_LEFTCTRL, KEY_LEFTSHIFT],
+    "menu": [KEY_COMPOSE],
 }
 
 
@@ -776,13 +778,15 @@ def backend_class():
 # ==============================================================================
 
 class MagShift:
-    def __init__(self, backend):
+    def __init__(self, backend, pause_trigger=False):
         """Initialize MagShift with a platform backend and state.
 
         Args:
             backend: LinuxBackend, MacBackend or any object with the same methods
+            pause_trigger: Also correct on a single Pause press (Punto Switcher style)
         """
         self.backend = backend
+        self.pause_trigger = pause_trigger
 
         self.input_buffer = InputBuffer()
         self.last_press_time = 0
@@ -854,6 +858,12 @@ class MagShift:
         elif code in [KEY_LEFTALT]:  # KEY_RIGHTALT is important for Ґ
             self.alt_pressed = (value == 1 or value == 2)
 
+        # Optional instant trigger: a single Pause press
+        if code == KEY_PAUSE:
+            if value == 1 and self.pause_trigger:
+                self.fix_last_word()
+            return
+
         # Handle trigger key (Shift)
         if code in self.trigger_btn:
 
@@ -911,6 +921,7 @@ def main():
 
     parser.add_argument("-n", "--numlock", action="store_true", help="Force NumLock ON and exit (Linux only)")
     parser.add_argument("--auto-numlock", action="store_true", help="Enable NumLock on start (Linux service mode)")
+    parser.add_argument("-p", "--pause", action="store_true", help="Also correct on a single Pause press (Linux)")
 
     args = parser.parse_args()
 
@@ -928,7 +939,7 @@ def main():
     if args.verbose:
         logger.info(f"[i] Using hotkey style: {args.hotkey} -> {selected_keys}")
 
-    app = MagShift(backend_class()(device_path=args.device, switch_keys=selected_keys))
+    app = MagShift(backend_class()(device_path=args.device, switch_keys=selected_keys), pause_trigger=args.pause)
 
     # If --NumLock is passed, just do that and exit
     if args.auto_numlock or args.numlock:

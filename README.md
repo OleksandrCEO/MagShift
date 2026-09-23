@@ -210,7 +210,9 @@ Since this tool relies on the graphical session (Wayland/X11), the most reliable
     * For Alt+Shift: `magshift -k alt`
     * For Ctrl+Shift: `magshift -k ctrl`
     * For CapsLock: `magshift -k caps`
+    * For the Menu key: `magshift -k menu`
     * Default is Meta+Space (`-k meta`)
+    * To also correct on a single `Pause` press (Punto Switcher style): add `-p`
 5.  Click Apply (Гаразд).
 
 That's it! MagShift will now start automatically with your user session.
@@ -284,12 +286,17 @@ If you want to run it manually for debugging or development:
     python3 main.py -k meta   # Meta+Space (default, KDE-style)
     python3 main.py -k ctrl   # Ctrl+Shift
     python3 main.py -k caps   # CapsLock
+    python3 main.py -k menu   # Menu key
+
+    # Also correct on a single Pause press, double Shift keeps working (Linux only)
+    python3 main.py -p
 
 Available hotkey styles (Linux only):
 - `alt` - Left Alt + Left Shift (common on GNOME/XFCE)
 - `meta` - Left Meta (Windows key) + Space (default, KDE standard)
 - `ctrl` - Left Ctrl + Left Shift
 - `caps` - CapsLock only
+- `menu` - Menu key only (the context-menu key next to Right Ctrl)
 
 ## 📜 License
 

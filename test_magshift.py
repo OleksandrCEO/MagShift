@@ -14,7 +14,7 @@ import main
 from main import (
     InputBuffer, MagShift, decode_keys,
     KEY_A, KEY_B, KEY_C, KEY_1, KEY_SPACE, KEY_ENTER, KEY_TAB,
-    KEY_BACKSPACE, KEY_RIGHTSHIFT, KEY_LEFTCTRL,
+    KEY_BACKSPACE, KEY_RIGHTSHIFT, KEY_LEFTCTRL, KEY_PAUSE,
 )
 
 
@@ -158,6 +158,21 @@ def test_empty_buffer_skips_correction():
     tap(app, KEY_RIGHTSHIFT)
     tap(app, KEY_RIGHTSHIFT)
     assert app.backend.log == []
+
+
+def test_pause_is_ignored_by_default():
+    app = make_app()
+    tap(app, KEY_A)
+    tap(app, KEY_PAUSE)
+    assert app.backend.log == []
+
+
+def test_pause_triggers_correction_when_enabled():
+    app = MagShift(FakeBackend(), pause_trigger=True)
+    tap(app, KEY_A)
+    tap(app, KEY_PAUSE)
+    kinds = [entry[0] for entry in app.backend.log]
+    assert kinds == ['reset', 'backspace', 'switch', 'replay'], kinds
 
 
 # --- Linux backend, exercised against a stub evdev ---
