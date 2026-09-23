@@ -4,13 +4,13 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
-🇺🇦 [Коротка версія українською](./README.uk.md)
-
 **MagShift** - Advanced Keyboard Layout Switcher with Instant Correction Engine for Linux (Wayland & X11) and macOS.
 It fixes what you just typed without making you retype it.
 
 Typed `ghbdsn` instead of `привіт`? Tap **Shift** twice: MagShift deletes the phrase, switches the layout and types
 it again correctly. Tap twice again to undo.
+
+🇺🇦 [Коротка версія українською](./README.uk.md)
 
 Designed with **NixOS Flakes** in mind for reproducible and secure deployment. Also supports other Linux distros via
 a simple installer script, and macOS via a LaunchAgent:
