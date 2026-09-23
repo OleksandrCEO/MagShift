@@ -1,43 +1,65 @@
 # MagShift 🪄
 
 [![NixOS](https://img.shields.io/badge/NixOS-25.11+-5277C3?style=flat&logo=nixos&logoColor=white)](#%EF%B8%8F-nixos-installation-flake)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
-**MagShift** - Advanced Keyboard Layout Switcher with Instant Correction Engine for Linux (Wayland & X11) and macOS. It fixes what you just typed without making you retype it.
+🇺🇦 [Коротка версія українською](./README.uk.md)
 
-Designed with **NixOS Flakes** in mind for reproducible and secure deployment. 
+**MagShift** - Advanced Keyboard Layout Switcher with Instant Correction Engine for Linux (Wayland & X11) and macOS.
+It fixes what you just typed without making you retype it.
 
-Also supports other Linux distros via a simple installer script. For example: 
+Typed `ghbdsn` instead of `привіт`? Tap **Shift** twice: MagShift deletes the phrase, switches the layout and types
+it again correctly. Tap twice again to undo.
+
+Designed with **NixOS Flakes** in mind for reproducible and secure deployment. Also supports other Linux distros via
+a simple installer script, and macOS via a LaunchAgent:
 
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-Supported-E95420?style=flat&logo=ubuntu&logoColor=white)](#-installation-ubuntu--fedora--arch)
 [![Fedora](https://img.shields.io/badge/Fedora-Supported-51A2DA?style=flat&logo=fedora&logoColor=white)](#-installation-ubuntu--fedora--arch)
 [![Arch](https://img.shields.io/badge/Arch-Supported-1793D1?style=flat&logo=archlinux&logoColor=white)](#-installation-ubuntu--fedora--arch)
-
-And on macOS:
-
 [![macOS](https://img.shields.io/badge/macOS-12+-000000?style=flat&logo=apple&logoColor=white)](#-installation-macos)
+
+## Contents
+
+- [Features](#-features)
+- [How it works](#-how-it-works)
+- [NixOS Installation (Flake)](#%EF%B8%8F-nixos-installation-flake)
+- [Installation (Ubuntu / Fedora / Arch)](#-installation-ubuntu--fedora--arch)
+- [Installation (macOS)](#-installation-macos)
+- [Usage](#-usage)
+- [Autostart (Linux)](#-autostart-linux)
+- [Manual Usage (Development)](#%EF%B8%8F-manual-usage-development)
+- [Related](#-related)
 
 ## ✨ Features
 
-* **⚡ Double Right Shift:** Tap `Right Shift` twice to switch layout (e.g., English ↔ Ukrainian).
-* **🖋️ Auto-Correction:** It automatically corrects the **last typed phrase** when you switch.
+* **⚡ Double Shift:** Tap either `Shift` twice to switch layout (e.g., English ↔ Ukrainian). Tap twice again to undo.
+* **🖋️ Auto-Correction:** Corrects the **last typed phrase** when you switch, not just the last word.
+* **⏸️ Pause key (optional):** Punto Switcher style: a single `Pause` press corrects too. Off by default.
+* **🎛️ Works with your hotkey:** On Linux it emulates the switch hotkey you already use: Meta+Space, Alt+Shift,
+  Ctrl+Shift, CapsLock or the Menu key.
 * **🔒 Secure:** Runs with dynamic permissions (via Udev ACLs), no manual group configuration required.
 * **❄️ Pure Nix:** Zero global dependencies. Builds cleanly from the Nix Store.
 * **🍎 macOS Native:** Uses a Quartz event tap and the Text Input Source API - no hotkey emulation, no extra daemons.
 
+## 🧠 How it works
 
+MagShift listens to the physical keyboard and remembers the last phrase you typed (up to 20 keystrokes, reset after
+1 second of silence, on `Enter`/`Tab`/`Esc`, or when a shortcut like `Ctrl+C` is pressed). On a double `Shift` it:
 
-## 📋 Clipboard Version
+1. sends `Backspace` for every remembered keystroke,
+2. switches the layout (Linux: emulates your system hotkey; macOS: selects the input source directly),
+3. replays the phrase, keeping the shift state of every key.
 
-Old unsecure version with clipboard dependency and extra features (like handling selected text) available in extra branch: [SkySwitcher](https://github.com/OleksandrCEO/SkySwitcher)
-
+Nothing is stored beyond those 20 keystrokes, the clipboard is never touched, and no data leaves your machine.
 
 ---
 
 ## ❄️ NixOS Installation (Flake)
 
-Since this project exports a NixOS module, installation is clean, but requires an overlay to make the package available to the system.
+Since this project exports a NixOS module, installation is clean, but requires an overlay to make the package
+available to the system.
 
 ### 1. Add to `flake.nix`
 
@@ -46,10 +68,10 @@ Add the input, import the module, and **apply the overlay** in your system confi
     {
       inputs = {
         nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
-        
+
         # Add MagShift input
         magshift.url = "github:OleksandrCEO/MagShift";
-        # magshift.inputs.nixpkgs.follows = "nixpkgs"; 
+        # magshift.inputs.nixpkgs.follows = "nixpkgs";
       };
 
       outputs = { self, nixpkgs, magshift, ... }: {
@@ -79,26 +101,26 @@ Add the input, import the module, and **apply the overlay** in your system confi
     { config, pkgs, ... }:
 
     {
-      # Enable MagShift
       services.magshift.enable = true;
+
+      # Optional, defaults shown:
+      # services.magshift.hotkey = "meta";     # meta | alt | ctrl | caps | menu (see Usage)
+      # services.magshift.pause = false;       # also correct on a single Pause press
+      # services.magshift.autoNumlock = true;  # force NumLock ON at start
     }
 
-> **Note:** With the new udev-based approach, users **do not need** to be added to `input` or `uinput` groups. Permissions are granted dynamically to the active graphical session user.
+The module installs the package, loads `uinput`, adds the udev rules and runs MagShift as a system service.
 
-### 3. Update MagShift (when script updates but Nix flake hasn't)
+> **Note:** With the udev-based approach, users **do not need** to be added to `input` or `uinput` groups.
+> Permissions are granted dynamically to the active graphical session user.
 
-If you've made local changes or want to pull the latest version:
+### 3. Update MagShift
 
     cd /etc/nixos
     sudo nix flake update magshift
     sudo nixos-rebuild switch
 
-If you track your NixOS config in git:
-
-    cd /etc/nixos
-    sudo git add .
-    sudo git commit -m "Update MagShift to latest version"
-    sudo nixos-rebuild switch
+If you track your NixOS config in git, commit the updated `flake.lock` before rebuilding.
 
 ---
 
@@ -122,9 +144,12 @@ The installer will:
 3. Create udev rules for dynamic device permissions
 4. Reload udev to apply changes
 
+Then start it with `magshift` (or set up [autostart](#-autostart-linux)). If permissions do not work immediately,
+log out and back in.
+
 ### Update
 
-To update to the latest version, simply download and run the installer again:
+Download and run the installer again:
 
     wget https://github.com/OleksandrCEO/MagShift/archive/refs/heads/master.zip
     unzip -o master.zip
@@ -146,28 +171,30 @@ macOS 12 or newer, Intel or Apple Silicon. No `sudo` needed - everything is inst
 The installer will:
 1. Create a private virtualenv in `~/.local/share/magshift/venv` and install `pyobjc-framework-Quartz`
 2. Copy `main.py` next to it and add a `magshift` wrapper to `~/.local/bin`
-3. Register a LaunchAgent (`com.magwer.magshift`) that starts MagShift with your session
+3. Register a LaunchAgent (`com.magwer.magshift`) that starts MagShift with your session, so no extra autostart
+   setup is needed
 
 ### Grant Permissions (required)
 
 macOS will not let any process read or inject keystrokes until you allow it. Open
-**System Settings → Privacy & Security** and add the Python binary the installer prints to **both** lists.
+**System Settings → Privacy & Security** and add the Python binary the installer prints to **both** lists:
+
+1. **Input Monitoring** - lets MagShift see what you type
+2. **Accessibility** - lets MagShift type the correction back
+
 With a standalone Python that is the venv binary:
 
     ~/.local/share/magshift/venv/bin/python3
 
-With a framework Python (python.org or Homebrew) the venv binary re-launches `Python.app`, and that is
-what macOS checks, e.g.:
+With a framework Python (python.org or Homebrew) the venv binary re-launches `Python.app`, and that is what macOS
+checks, e.g.:
 
     /Library/Frameworks/Python.framework/Versions/3.x/Resources/Python.app
 
 In that case the grant covers every script run by that Python.
 
-1. **Input Monitoring** - lets MagShift see what you type
-2. **Accessibility** - lets MagShift type the correction back
-
-> In the file picker press `Cmd+Shift+G` and paste the path. The installer prints the exact
-> absolute path at the end of its run.
+> In the file picker press `Cmd+Shift+G` and paste the path. The installer prints the exact absolute path at the
+> end of its run.
 
 Then restart the agent:
 
@@ -189,114 +216,115 @@ Type a word in the wrong layout, tap **Shift** twice, and it should be retyped c
 | Option | Behaviour on macOS |
 |---|---|
 | `-k / --hotkey` | Ignored. Layouts are switched directly through `TISSelectInputSource`, so no hotkey has to be configured or emulated. |
+| `-p / --pause` | Has no effect: Mac keyboards have no Pause key. |
 | `-d / --device` | Ignored. The Quartz event tap is system-wide; there is no per-device capture. |
 | `-n / --numlock`, `--auto-numlock` | Ignored. Mac keyboards have no NumLock. |
 | `--list` | Lists the enabled keyboard layouts instead of input devices. |
 
-MagShift switches to the layout you used before the current one, so a second double-Shift undoes the
-correction. When no previous layout is known yet it takes the next one in `magshift --list` order.
+MagShift switches to the layout you used before the current one, so a second double-Shift undoes the correction.
+When no previous layout is known yet it takes the next one in `magshift --list` order.
 
 ---
 
-## 🤖 Autostart (KDE Plasma)
+## 🚀 Usage
+
+    magshift                 # start with defaults (Linux: emulates Meta+Space to switch)
+    magshift -k alt          # your desktop switches layouts with Alt+Shift
+    magshift -k menu -p      # switch with the Menu key, and also correct on a single Pause press
+    magshift --list          # Linux: input devices, macOS: keyboard layouts
+    magshift --verbose       # show what is being corrected
+
+| Option | Description | Platform |
+|---|---|---|
+| `-k, --hotkey STYLE` | Which hotkey your desktop uses to switch layouts, so MagShift can emulate it. `meta` (Meta+Space, default), `alt` (Alt+Shift), `ctrl` (Ctrl+Shift), `caps` (CapsLock), `menu` (Menu key) | Linux |
+| `-p, --pause` | Also correct on a single `Pause` press (Punto Switcher style). Double Shift keeps working. | Linux |
+| `-d, --device PATH` | Read from a specific `/dev/input/event*` device instead of auto-detecting the keyboard | Linux |
+| `--list` | List input devices (Linux) or enabled keyboard layouts (macOS) and exit | both |
+| `-n, --numlock` | Force NumLock ON and exit | Linux |
+| `--auto-numlock` | Force NumLock ON at start, then keep running (used by the NixOS service) | Linux |
+| `-v, --verbose` | Log every correction | both |
+
+**The hotkey style must match your desktop settings.** MagShift does not switch the layout itself on Linux: it
+presses the same hotkey you would. Check System Settings → Keyboard → Layouts if corrections do nothing.
+
+---
+
+## 🤖 Autostart (Linux)
+
+On macOS the installer already registers a LaunchAgent. On NixOS the module runs a system service. For other Linux
+distros pick one of the two options below.
+
+### KDE Plasma
 
 Since this tool relies on the graphical session (Wayland/X11), the most reliable way to start it is via KDE settings.
 
-1.  Open **System Settings** (Системні параметри) -> **Autostart** (Автозапуск).
-2.  Click **+ Add New** (+ Додати нове) -> **Application...** (Програма...).
-    * *Do not select "Login Script".*
-3.  Type `magshift` in the search bar and select it.
-4.  *(Optional)* If you want to use a different layout switching hotkey, click on the added entry, then click **Properties** and modify the command:
-    * For Alt+Shift: `magshift -k alt`
-    * For Ctrl+Shift: `magshift -k ctrl`
-    * For CapsLock: `magshift -k caps`
-    * For the Menu key: `magshift -k menu`
-    * Default is Meta+Space (`-k meta`)
-    * To also correct on a single `Pause` press (Punto Switcher style): add `-p`
-5.  Click Apply (Гаразд).
+1. Open **System Settings** (Системні параметри) -> **Autostart** (Автозапуск).
+2. Click **+ Add New** (+ Додати нове) -> **Application...** (Програма...).
+   * *Do not select "Login Script".*
+3. Type `magshift` in the search bar and select it.
+4. *(Optional)* To pass options, click on the added entry, then **Properties**, and change the command, e.g.
+   `magshift -k alt` or `magshift -k menu -p` (see [Usage](#-usage)).
+5. Click Apply (Гаразд).
 
 That's it! MagShift will now start automatically with your user session.
 
-## Autostart (as a Systemd User Service)
+### Systemd User Service
 
-To ensure **MagShift** runs automatically and remains stable on systems like Ubuntu, follow these steps to configure it as a `systemd` user service.
+Works on any distro with systemd (Ubuntu, Fedora, Arch, ...).
 
-## 1. Create the Service File
-Create the service configuration file in your user directory:
+1. Create the service file:
 
-    mkdir -p ~/.config/systemd/user
-    nano ~/.config/systemd/user/magshift.service
+       mkdir -p ~/.config/systemd/user
+       nano ~/.config/systemd/user/magshift.service
 
-Paste the following content into the file:
+   Paste the following, adding your options after the executable path if needed (e.g. `magshift -k alt`):
 
-    [Unit]
-    Description=MagShift Keyboard Layout Switcher
-    After=graphical-session.target
+       [Unit]
+       Description=MagShift Keyboard Layout Switcher
+       After=graphical-session.target
 
-    [Service]
-    # Ensure the path points to your installed executable
-    ExecStart=/usr/local/bin/magshift
-    Restart=always
-    RestartSec=5
+       [Service]
+       ExecStart=/usr/local/bin/magshift
+       Restart=always
+       RestartSec=5
 
-    [Install]
-    WantedBy=default.target
+       [Install]
+       WantedBy=default.target
 
-## 2. Enable and Start the Service
-Apply the changes and activate the service:
+2. Enable and start it:
 
-    # Reload the systemd user manager configuration
-    systemctl --user daemon-reload
+       systemctl --user daemon-reload
+       systemctl --user enable --now magshift.service
 
-    # Enable the service to start automatically on login
-    systemctl --user enable magshift.service
+3. Check status and logs:
 
-    # Start the service immediately
-    systemctl --user start magshift.service
-
-## 3. Verify Status and Logs
-To check if the service is running correctly, use:
-
-    systemctl --user status magshift.service
-
-To view real-time logs for debugging purposes:
-
-    journalctl --user -u magshift -f
+       systemctl --user status magshift.service
+       journalctl --user -u magshift -f
 
 ---
 
 ## 🛠️ Manual Usage (Development)
 
-If you want to run it manually for debugging or development:
-
-    # Enter the development shell
+    # Linux with Nix: enter the development shell (Python + evdev + evtest)
     nix develop
+
+    # macOS: use the interpreter the installer created
+    alias python3=~/.local/share/magshift/venv/bin/python3
 
     # Run with verbose logging to see key events
     python3 main.py --verbose
 
-    # List available input devices (keyboards)
-    python3 main.py --list
-
-    # Run the platform-neutral self-check (works on Linux and macOS)
+    # Run the platform-neutral self-check (works on Linux and macOS, no hardware needed)
     python3 test_magshift.py
 
-    # Use a different layout switching hotkey (Linux only)
-    python3 main.py -k alt    # Alt+Shift (default in many Linux DEs)
-    python3 main.py -k meta   # Meta+Space (default, KDE-style)
-    python3 main.py -k ctrl   # Ctrl+Shift
-    python3 main.py -k caps   # CapsLock
-    python3 main.py -k menu   # Menu key
+`main.py` is a single file with three layers: platform-neutral key codes and the input buffer, a backend per platform
+(`LinuxBackend` on evdev/uinput, `MacBackend` on Quartz + Carbon TIS), and the `MagShift` state machine that never
+touches a platform API directly.
 
-    # Also correct on a single Pause press, double Shift keeps working (Linux only)
-    python3 main.py -p
+## 🔗 Related
 
-Available hotkey styles (Linux only):
-- `alt` - Left Alt + Left Shift (common on GNOME/XFCE)
-- `meta` - Left Meta (Windows key) + Space (default, KDE standard)
-- `ctrl` - Left Ctrl + Left Shift
-- `caps` - CapsLock only
-- `menu` - Menu key only (the context-menu key next to Right Ctrl)
+* **Clipboard version:** the old, less secure version with a clipboard dependency and extra features (like handling
+  selected text) lives in a separate repo: [SkySwitcher](https://github.com/OleksandrCEO/SkySwitcher).
 
 ## 📜 License
 
