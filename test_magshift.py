@@ -245,6 +245,28 @@ def test_running_binary_is_real_file():
     assert os.path.isfile(main._running_binary()), main._running_binary()
 
 
+def test_switcher_prefers_previous_layout():
+    class Carbon:
+        selected = None
+        def TISSelectInputSource(self, src):
+            Carbon.selected = src
+            return 0
+
+    sw = object.__new__(main.InputSourceSwitcher)
+    sw.carbon = Carbon()
+    state = {'cur': 'uk'}
+    sw.current_id = lambda: state['cur']
+    sw.layouts = lambda: [('RU', 'ru', 'Russian'), ('UK', 'uk', 'Ukrainian'), ('US', 'us', 'U.S.')]
+    sw._seen, sw._previous = 'uk', None
+
+    state['cur'] = 'us'
+    sw.note_current()               # user switched Ukrainian -> U.S.
+    assert sw.switch_next() == 'uk' and Carbon.selected == 'UK'
+
+    sw._previous = None             # nothing known yet: fall back to next in list
+    assert sw.switch_next() == 'ru'
+
+
 def main_():
     tests = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
     for test in tests:

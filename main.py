@@ -456,6 +456,9 @@ class InputSourceSwitcher:
         self.prop_type = c_void_p.in_dll(self.carbon, 'kTISPropertyInputSourceType')
         self.type_layout = c_void_p.in_dll(self.carbon, 'kTISTypeKeyboardLayout')
 
+        self._seen = self.current_id()
+        self._previous = None
+
     def _to_str(self, cfstring):
         if not cfstring:
             return None
@@ -493,8 +496,24 @@ class InputSourceSwitcher:
         self.cf.CFRelease(src)
         return source_id
 
+    def note_current(self):
+        """Remember the layout that was active before the current one.
+
+        Called on every key press: a layout change made by the user (menu bar,
+        Ctrl+Space, Fn) is only visible to us through polling.
+        """
+        current = self.current_id()
+        if current != self._seen:
+            self._previous, self._seen = self._seen, current
+
     def switch_next(self):
-        """Select the next enabled keyboard layout. Returns its id, or None."""
+        """Select the layout used before the current one, falling back to the
+        next enabled layout. Returns its id, or None.
+
+        With three or more layouts, cycling would pick whatever happens to be
+        next in the list; the previously used layout is the one the user most
+        likely meant to type in.
+        """
         layouts = self.layouts()
         if len(layouts) < 2:
             logger.warning("[!] Less than two keyboard layouts enabled - nothing to switch to.")
@@ -502,7 +521,9 @@ class InputSourceSwitcher:
 
         current = self.current_id()
         index = next((i for i, (_, sid, _) in enumerate(layouts) if sid == current), -1)
-        target, target_id, target_name = layouts[(index + 1) % len(layouts)]
+        target, target_id, target_name = next(
+            (layout for layout in layouts if layout[1] == self._previous and self._previous != current),
+            layouts[(index + 1) % len(layouts)])
 
         status = self.carbon.TISSelectInputSource(target)
         if status != 0:
@@ -510,7 +531,6 @@ class InputSourceSwitcher:
             return None
         logger.info(f"[i] Layout -> {target_name} ({target_id})")
         return target_id
-
 
 def _running_binary():
     """Path macOS privacy checks apply to. A framework Python re-execs Python.app,
@@ -680,6 +700,8 @@ class MacBackend:
                 value = 1 if (flags & bit) else 0
         elif event_type == q.kCGEventKeyDown:
             value = 2 if q.CGEventGetIntegerValueField(event, q.kCGKeyboardEventAutorepeat) else 1
+            if value == 1:
+                self.switcher.note_current()
         elif event_type == q.kCGEventKeyUp:
             value = 0
         else:

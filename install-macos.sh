@@ -125,6 +125,11 @@ cat > "$PLIST" <<PLISTEOF
 PLISTEOF
 
 launchctl bootout "gui/$UID/$LABEL" 2>/dev/null || true
+# bootout returns before the old agent is gone; bootstrap then fails with EIO.
+for _ in $(seq 50); do
+    launchctl print "gui/$UID/$LABEL" &>/dev/null || break
+    sleep 0.1
+done
 launchctl bootstrap "gui/$UID" "$PLIST"
 launchctl enable "gui/$UID/$LABEL"
 
