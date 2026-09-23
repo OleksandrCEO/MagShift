@@ -240,6 +240,11 @@ def test_linux_backend_emits_expected_uinput_sequence():
     assert backend.ui.writes == [(main.KEY_NUMLOCK, 1), (main.KEY_NUMLOCK, 0)]
 
 
+def test_running_binary_is_real_file():
+    import os
+    assert os.path.isfile(main._running_binary()), main._running_binary()
+
+
 def main_():
     tests = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
     for test in tests:

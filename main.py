@@ -512,6 +512,16 @@ class InputSourceSwitcher:
         return target_id
 
 
+def _running_binary():
+    """Path macOS privacy checks apply to. A framework Python re-execs Python.app,
+    so sys.executable (the venv path) would name the wrong binary."""
+    import os
+    import subprocess
+    out = subprocess.run(["ps", "-o", "comm=", "-p", str(os.getpid())],
+                         capture_output=True, text=True).stdout.strip()
+    return out or sys.executable
+
+
 class MacBackend:
     """Quartz event tap (input) + CGEventPost (output) + TIS (layout switch)."""
 
@@ -685,7 +695,7 @@ class MacBackend:
 
         if not self.accessibility_granted():
             logger.warning("[!] Accessibility is not granted - corrections will be silently dropped.")
-            logger.warning("    System Settings -> Privacy & Security -> Accessibility")
+            logger.warning(f"    System Settings -> Privacy & Security -> Accessibility -> {_running_binary()}")
 
         mask = (q.CGEventMaskBit(q.kCGEventKeyDown)
                 | q.CGEventMaskBit(q.kCGEventKeyUp)
@@ -702,7 +712,8 @@ class MacBackend:
 
         if self.tap is None:
             logger.error("[✗] Could not create the event tap.")
-            logger.error("    Grant Input Monitoring and Accessibility to the app running MagShift:")
+            logger.error("    Grant Input Monitoring and Accessibility to the binary running MagShift:")
+            logger.error(f"    {_running_binary()}")
             logger.error("    System Settings -> Privacy & Security -> Input Monitoring / Accessibility")
             sys.exit(1)
 

@@ -62,12 +62,15 @@ log_info "Creating virtualenv at $PREFIX/venv ..."
 
 mkdir -p "$PREFIX" "$BIN_DIR"
 
-# --copies gives the venv its own python binary, so macOS can grant Input
-# Monitoring and Accessibility to MagShift alone instead of to every script
-# that happens to run under the system interpreter.
+# --copies gives the venv its own python binary. On a standalone Python that
+# binary is what macOS grants permissions to; on a framework build (python.org,
+# Homebrew) it re-execs Python.app, so the grant has to go there instead.
 python3 -m venv --copies "$PREFIX/venv"
 
 VENV_PY="$PREFIX/venv/bin/python3"
+# The binary that actually runs - and the one TCC checks.
+TCC_BIN="$("$VENV_PY" -c 'import os, subprocess; print(subprocess.run(["ps", "-o", "comm=", "-p", str(os.getpid())], capture_output=True, text=True).stdout.strip())')"
+[ -x "$TCC_BIN" ] || TCC_BIN="$VENV_PY"
 "$VENV_PY" -m pip install --upgrade --quiet pip
 "$VENV_PY" -m pip install --quiet "pyobjc-framework-Quartz>=9.0"
 
@@ -139,12 +142,15 @@ log_warn "One manual step is required: macOS permissions."
 echo ""
 echo "  Open System Settings -> Privacy & Security and add this binary to BOTH lists:"
 echo ""
-echo -e "      ${BLUE}$VENV_PY${NC}"
+echo -e "      ${BLUE}$TCC_BIN${NC}"
 echo ""
 echo "    1. Input Monitoring   (to read your keystrokes)"
 echo "    2. Accessibility      (to type the correction back)"
 echo ""
 echo "  In the file picker press Cmd+Shift+G and paste the path above."
+if [ "$TCC_BIN" != "$VENV_PY" ]; then
+    echo "  (Your Python is a framework build: the grant applies to every script it runs.)"
+fi
 echo "  Then restart the agent:"
 echo ""
 echo "      launchctl kickstart -k gui/$UID/$LABEL"

@@ -151,9 +151,17 @@ The installer will:
 ### Grant Permissions (required)
 
 macOS will not let any process read or inject keystrokes until you allow it. Open
-**System Settings → Privacy & Security** and add the venv Python binary to **both** lists:
+**System Settings → Privacy & Security** and add the Python binary the installer prints to **both** lists.
+With a standalone Python that is the venv binary:
 
     ~/.local/share/magshift/venv/bin/python3
+
+With a framework Python (python.org or Homebrew) the venv binary re-launches `Python.app`, and that is
+what macOS checks, e.g.:
+
+    /Library/Frameworks/Python.framework/Versions/3.x/Resources/Python.app
+
+In that case the grant covers every script run by that Python.
 
 1. **Input Monitoring** - lets MagShift see what you type
 2. **Accessibility** - lets MagShift type the correction back
