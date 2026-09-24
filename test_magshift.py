@@ -7,8 +7,10 @@ machine through a recording fake backend.
     python3 test_magshift.py
 """
 
+import os
 import sys
 import time
+from unittest import mock
 
 import main
 from main import (
@@ -218,8 +220,9 @@ def _install_stub_evdev():
 
 def test_linux_backend_emits_expected_uinput_sequence():
     _install_stub_evdev()
-    backend = main.LinuxBackend(device_path='/dev/input/event0',
-                                switch_keys=main.HOTKEY_STYLES['alt'])
+    with mock.patch.dict(os.environ, {}, clear=True):  # no X11 session: a real XTEST would type into it
+        backend = main.LinuxBackend(device_path='/dev/input/event0',
+                                    switch_keys=main.HOTKEY_STYLES['alt'])
 
     backend.ui.writes.clear()
     backend.replay_keys([(KEY_A, False), (KEY_B, True)])
@@ -243,6 +246,24 @@ def test_linux_backend_emits_expected_uinput_sequence():
     backend.ui.writes.clear()
     backend.ensure_numlock_state()
     assert backend.ui.writes == [(main.KEY_NUMLOCK, 1), (main.KEY_NUMLOCK, 0)]
+
+
+class _StubXTest(_StubUInput):
+    pass
+
+
+def test_linux_backend_types_through_xtest_only_on_x11():
+    _install_stub_evdev()
+    sessions = [
+        ({'DISPLAY': ':0'}, True),
+        ({'DISPLAY': ':0', 'WAYLAND_DISPLAY': 'wayland-0'}, False),  # Xwayland: X apps only
+        ({'DISPLAY': ':0', 'XDG_SESSION_TYPE': 'wayland'}, False),
+        ({}, False),  # console or system service
+    ]
+    for env, expect_xtest in sessions:
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(main, 'XTestKeyboard', _StubXTest):
+            backend = main.LinuxBackend(device_path='/dev/input/event0')
+        assert isinstance(backend.ui, _StubXTest) == expect_xtest, env
 
 
 def test_running_binary_is_real_file():

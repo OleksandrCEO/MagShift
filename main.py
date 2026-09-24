@@ -10,7 +10,7 @@
 #
 # The file is split into three layers:
 #   1. Platform-neutral key codes, buffer and helpers.
-#   2. Backends: LinuxBackend (evdev/uinput) and MacBackend (Quartz/Carbon).
+#   2. Backends: LinuxBackend (evdev/uinput, XTEST on X11) and MacBackend (Quartz/Carbon).
 #   3. MagShift - the state machine, which never touches a platform API directly.
 
 import sys
@@ -185,8 +185,53 @@ class InputBuffer:
 # Backends
 # ==============================================================================
 
+class XTestKeyboard:
+    """X11 output through the XTEST extension, with the write()/syn() calls of evdev's UInput.
+
+    On X11 a uinput keyboard is a newly plugged device, and X.Org gives it the system default layout instead of the
+    session one (set via setxkbmap, or by a desktop that does not re-apply it on hotplug): the emulated hotkey does
+    not switch and the phrase is replayed in the wrong layout. The XTEST keyboard exists since server start and
+    follows every layout change, so it types exactly like the physical keyboard.
+    """
+
+    def __init__(self):
+        import ctypes
+        import ctypes.util
+        from ctypes import c_void_p, c_char_p, c_uint, c_int, c_ulong
+
+        self.x11 = ctypes.cdll.LoadLibrary(ctypes.util.find_library('X11') or 'libX11.so.6')
+        self.xtst = ctypes.cdll.LoadLibrary(ctypes.util.find_library('Xtst') or 'libXtst.so.6')
+        self.x11.XOpenDisplay.restype = c_void_p
+        self.x11.XOpenDisplay.argtypes = [c_char_p]
+        self.x11.XFlush.argtypes = [c_void_p]
+        self.x11.XCloseDisplay.argtypes = [c_void_p]
+        self.x11.XQueryExtension.argtypes = [c_void_p, c_char_p] + [ctypes.POINTER(c_int)] * 3
+        self.xtst.XTestQueryExtension.argtypes = [c_void_p] + [ctypes.POINTER(c_int)] * 4
+        self.xtst.XTestFakeKeyEvent.argtypes = [c_void_p, c_uint, c_int, c_ulong]
+
+        self.display = self.x11.XOpenDisplay(None)
+        if not self.display:
+            raise OSError("cannot open the X display")
+        unused = [ctypes.byref(c_int()) for _ in range(4)]
+        reason = None
+        if self.x11.XQueryExtension(self.display, b'XWAYLAND', *unused[:3]):
+            reason = "the display is Xwayland, whose XTEST reaches X11 apps only"
+        elif not self.xtst.XTestQueryExtension(self.display, *unused):
+            reason = "the X server has no XTEST extension"
+        if reason:
+            self.x11.XCloseDisplay(self.display)
+            raise OSError(reason)
+
+    def write(self, _event_type, code, value):
+        # X.Org keycodes are evdev codes shifted by 8
+        self.xtst.XTestFakeKeyEvent(self.display, code + 8, value, 0)
+
+    def syn(self):
+        self.x11.XFlush(self.display)
+
+
 class LinuxBackend:
-    """evdev/uinput backend. Internal key codes are evdev codes, so no
+    """evdev input; uinput output, or XTEST in an X11 session. Internal key codes are evdev codes, so no
     translation is needed in either direction."""
 
     name = "linux"
@@ -218,6 +263,10 @@ class LinuxBackend:
         else:
             self.device = self.find_keyboard()
 
+        self.ui = self.xtest_keyboard()
+        if self.ui:
+            return
+
         uinput_keys = [
             KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_RIGHTCTRL, KEY_RIGHTSHIFT,
             KEY_LEFTMETA, KEY_LEFTALT, KEY_BACKSPACE, KEY_SPACE,
@@ -230,6 +279,23 @@ class LinuxBackend:
         except OSError as err:
             logger.error(f"[✗] Failed to create UInput: {err}")
             sys.exit(1)
+
+    @staticmethod
+    def xtest_keyboard():
+        """XTestKeyboard in an X11 session; None on Wayland, a text console or as a system service."""
+        import os
+        if os.environ.get('WAYLAND_DISPLAY') or os.environ.get('XDG_SESSION_TYPE') == 'wayland':
+            return None
+        if not os.environ.get('DISPLAY'):
+            return None
+        try:
+            keyboard = XTestKeyboard()
+        except OSError as err:
+            logger.warning(f"[!] Not typing through XTEST ({err}), using uinput. On X11, X.Org gives the uinput "
+                           "keyboard the system default layout (see 'localectl status'), which must match yours.")
+            return None
+        logger.info("[i] X11 session: typing through XTEST")
+        return keyboard
 
     # --- Device discovery ---
 

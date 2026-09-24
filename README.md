@@ -139,13 +139,18 @@ For non-NixOS systems, use the provided installer script:
     sudo ./install.sh
 
 The installer will:
-1. Install `python3-evdev` via your package manager (apt/dnf/pacman)
-2. Copy `main.py` to `/usr/local/bin/magshift`
-3. Create udev rules for dynamic device permissions
-4. Reload udev to apply changes
+1. Print your system details (distro, session type, default keyboard layout) for troubleshooting
+2. Install `python3-evdev` via your package manager (apt/dnf/pacman) if it is missing. The exact command is shown,
+   and package lists are not refreshed: if it fails, run `sudo apt update` (or your distro's equivalent) yourself
+3. Copy `main.py` to `/usr/local/bin/magshift`
+4. Create udev rules for dynamic device permissions and apply them
+5. Check that your user can access `/dev/uinput` and every keyboard
 
-Then start it with `magshift` (or set up [autostart](#-autostart-linux)). If permissions do not work immediately,
-log out and back in.
+Then start it with `magshift` (or set up [autostart](#-autostart-linux)).
+
+> **X11:** on the first install the installer asks for a reboot instead of applying keyboard access live. X.Org
+> re-creates every keyboard that gets a udev event, with the system default layout, so applying it live would reset
+> a layout set via `setxkbmap`. Wayland sessions get access immediately.
 
 ### Update
 
@@ -246,6 +251,10 @@ When no previous layout is known yet it takes the next one in `magshift --list` 
 
 **The hotkey style must match your desktop settings.** MagShift does not switch the layout itself on Linux: it
 presses the same hotkey you would. Check System Settings → Keyboard → Layouts if corrections do nothing.
+
+**X11:** MagShift types through the XTEST extension of your X session, so start it from inside that session (desktop
+autostart, i3 `exec`, `.xinitrc`). Started without access to the display, it falls back to a virtual uinput keyboard,
+and X.Org gives new keyboards the system default layout (`localectl status`), not one set via `setxkbmap`.
 
 ---
 
