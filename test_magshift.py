@@ -10,6 +10,7 @@ machine through a recording fake backend.
 import os
 import sys
 import time
+import types
 from unittest import mock
 
 import main
@@ -183,6 +184,7 @@ def test_pause_triggers_correction_when_enabled():
 
 class _StubEcodes:
     EV_KEY = 1
+    EV_LED = 17
     LED_NUML = 0
 
 
@@ -198,23 +200,54 @@ class _StubUInput:
 
 
 class _StubInputDevice:
-    def __init__(self, path):
+    """Backed by a pipe, so the backend's selector waits on it like on a real /dev/input/event* node."""
+
+    KEYBOARD = [KEY_A, main.KEY_Z, KEY_SPACE, KEY_ENTER]
+
+    def __init__(self, path, name="Stub Keyboard", keys=KEYBOARD):
         self.path = path
-        self.name = "Stub Keyboard"
+        self.name = name
+        self.keys = keys
+        self.queue = []
+        self.unplugged = False
+        self.read_fd, self.write_fd = os.pipe()
+
+    def fileno(self):
+        return self.read_fd
+
+    def capabilities(self):
+        return {_StubEcodes.EV_KEY: self.keys, _StubEcodes.EV_LED: [_StubEcodes.LED_NUML]}
 
     def leds(self, verbose=False):
         return []
 
+    def close(self):
+        os.close(self.read_fd)
+        os.close(self.write_fd)
 
-def _install_stub_evdev():
-    import sys as _sys
-    import types
+    def press(self, code):
+        self.queue.append(types.SimpleNamespace(type=_StubEcodes.EV_KEY, code=code, value=1))
+        os.write(self.write_fd, b'.')
+
+    def unplug(self):
+        self.unplugged = True
+        os.write(self.write_fd, b'.')
+
+    def read(self):
+        os.read(self.read_fd, 1)
+        if self.unplugged:
+            raise OSError(19, "No such device")
+        return [self.queue.pop(0)]
+
+
+def _install_stub_evdev(devices=None):
+    """Stub evdev. With devices ({path: _StubInputDevice}) it lists and opens exactly those."""
     module = types.ModuleType('evdev')
     module.ecodes = _StubEcodes
     module.UInput = _StubUInput
-    module.InputDevice = _StubInputDevice
-    module.list_devices = lambda: ['/dev/input/event0']
-    _sys.modules['evdev'] = module
+    module.InputDevice = devices.__getitem__ if devices else _StubInputDevice
+    module.list_devices = (lambda: list(devices)) if devices else (lambda: ['/dev/input/event0'])
+    sys.modules['evdev'] = module
     return module
 
 
@@ -264,6 +297,99 @@ def test_linux_backend_types_through_xtest_only_on_x11():
         with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(main, 'XTestKeyboard', _StubXTest):
             backend = main.LinuxBackend(device_path='/dev/input/event0')
         assert isinstance(backend.ui, _StubXTest) == expect_xtest, env
+
+
+def test_xtest_layout_is_synced_before_the_first_keystroke():
+    class RecordingXTest(_StubXTest):
+        def sync_layout(self):
+            self.writes.append('sync')
+
+    _install_stub_evdev()
+    with mock.patch.dict(os.environ, {'DISPLAY': ':0'}, clear=True), \
+            mock.patch.object(main, 'XTestKeyboard', RecordingXTest):
+        backend = main.LinuxBackend(device_path='/dev/input/event0')
+        backend.reset_modifiers()
+    assert backend.ui.writes[0] == 'sync', backend.ui.writes
+
+
+class _Stop(Exception):
+    pass
+
+
+def _run_until(backend, received, count):
+    """Run the backend loop until on_event has collected count key codes in total."""
+    def on_event(code, value):
+        received.append(code)
+        if len(received) == count:
+            raise _Stop
+    try:
+        backend.run(on_event)
+    except _Stop:
+        pass
+
+
+def test_linux_backend_reads_every_keyboard_across_hotplug():
+    laptop = _StubInputDevice('/dev/input/event0', "AT Translated Set 2 keyboard")
+    external = _StubInputDevice('/dev/input/event1', "Keychron K2")
+    devices = {
+        laptop.path: laptop,
+        external.path: external,
+        '/dev/input/event2': _StubInputDevice('/dev/input/event2', "Power Button", keys=[116]),
+        '/dev/input/event3': _StubInputDevice('/dev/input/event3', main.LinuxBackend.VIRTUAL_NAME),
+    }
+    _install_stub_evdev(devices)
+    with mock.patch.dict(os.environ, {}, clear=True):
+        backend = main.LinuxBackend()
+    assert sorted(backend.devices) == [laptop.path, external.path], backend.devices
+
+    received = []
+    external.press(KEY_A)  # typing on the keyboard that is not found first
+    _run_until(backend, received, 1)
+
+    laptop.unplug()  # the other keyboards keep working
+    del devices[laptop.path]
+    external.press(KEY_B)
+    _run_until(backend, received, 2)
+
+    usb = _StubInputDevice(laptop.path, "USB Keyboard")  # plugged in while running, reusing the freed path
+    devices[usb.path] = usb
+    usb.press(KEY_C)
+    backend.RESCAN_INTERVAL = 0
+    _run_until(backend, received, 3)
+
+    assert received == [KEY_A, KEY_B, KEY_C], received
+    assert backend.devices == {usb.path: usb, external.path: external}, backend.devices
+
+
+def test_linux_backend_keeps_the_keyboard_when_the_correction_fails():
+    keyboard = _StubInputDevice('/dev/input/event0')
+    _install_stub_evdev({keyboard.path: keyboard})
+    with mock.patch.dict(os.environ, {}, clear=True):
+        backend = main.LinuxBackend()
+
+    def failing_correction(code, value):
+        raise OSError(5, "uinput write failed")
+
+    keyboard.press(KEY_A)
+    try:
+        backend.run(failing_correction)
+    except OSError:
+        pass
+    assert keyboard.path in backend.devices, "an output error was taken for an unplugged keyboard"
+
+
+def test_linux_backend_exits_when_the_manual_device_is_gone():
+    keyboard = _StubInputDevice('/dev/input/event7')
+    _install_stub_evdev({keyboard.path: keyboard})
+    with mock.patch.dict(os.environ, {}, clear=True):
+        backend = main.LinuxBackend(device_path=keyboard.path)
+    keyboard.unplug()
+    try:
+        backend.run(lambda code, value: None)
+    except SystemExit as exit_:
+        assert exit_.code == 1
+    else:
+        raise AssertionError("run() kept going without its only device")
 
 
 def test_running_binary_is_real_file():

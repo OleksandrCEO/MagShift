@@ -190,9 +190,12 @@ class XTestKeyboard:
 
     On X11 a uinput keyboard is a newly plugged device, and X.Org gives it the system default layout instead of the
     session one (set via setxkbmap, or by a desktop that does not re-apply it on hotplug): the emulated hotkey does
-    not switch and the phrase is replayed in the wrong layout. The XTEST keyboard exists since server start and
-    follows every layout change, so it types exactly like the physical keyboard.
+    not switch and the phrase is replayed in the wrong layout. The XTEST keyboard adds no device, and sync_layout()
+    gives it the layout of the keyboard the user types on.
     """
+
+    # X.Org allocates ids from 2 and creates the core pointer and keyboard, then their XTEST pair, first
+    DEVICE_ID = '5'
 
     def __init__(self):
         import ctypes
@@ -229,6 +232,22 @@ class XTestKeyboard:
     def syn(self):
         self.x11.XFlush(self.display)
 
+    def sync_layout(self):
+        """Copy the layout of the keyboard used last, which the core keyboard mirrors, to the XTEST keyboard.
+
+        The XTEST keyboard follows layouts applied to the core keyboard (setxkbmap, desktop settings), but not one
+        configured system-wide (localectl, xorg.conf): that reaches physical keyboards only, leaving XTEST on 'us'.
+        """
+        import os
+        import subprocess
+        display = os.environ.get('DISPLAY', '')
+        try:
+            keymap = subprocess.run(['xkbcomp', display, '-'], capture_output=True, check=True, timeout=2).stdout
+            subprocess.run(['xkbcomp', '-i', self.DEVICE_ID, '-', display], input=keymap, capture_output=True,
+                           check=True, timeout=2)
+        except (OSError, subprocess.SubprocessError) as err:
+            logger.warning(f"[!] Could not copy the keyboard layout to XTEST, corrections may use another: {err}")
+
 
 class LinuxBackend:
     """evdev input; uinput output, or XTEST in an X11 session. Internal key codes are evdev codes, so no
@@ -238,14 +257,12 @@ class LinuxBackend:
     supports_numlock = True
     supports_hotkey_styles = True
 
-    IGNORED_KEYWORDS = [
-        'mouse', 'webcam', 'audio', 'video', 'consumer',
-        'control', 'headset', 'receiver', 'solaar', 'hotkeys',
-        'button', 'switch', 'hda', 'dock'
-    ]
+    VIRTUAL_NAME = "MagShift-Virtual"
     REQUIRED_KEYS = {KEY_SPACE, KEY_ENTER, KEY_A, KEY_Z}
+    RESCAN_INTERVAL = 3  # seconds between checks for newly connected keyboards
 
     def __init__(self, device_path=None, switch_keys=None):
+        import selectors
         from evdev import InputDevice, UInput, ecodes, list_devices
         self._ecodes = ecodes
         self._InputDevice = InputDevice
@@ -253,15 +270,25 @@ class LinuxBackend:
 
         self.switch_keys = switch_keys if switch_keys else HOTKEY_STYLES['meta']
 
+        # Every keyboard is read: which one the user types on (laptop + external, a VM with PS/2 and virtio,
+        # a remapper like keyd that grabs the physical one) cannot be told from device names
+        self.device_path = device_path
+        self.devices = {}  # path -> InputDevice being read
+        self.checked = set()  # paths already looked at, keyboards or not
+        self.selector = selectors.DefaultSelector()
+
         if device_path:
             try:
-                self.device = InputDevice(device_path)
-                logger.info(f"[i] Manual device: {self.device.name}")
+                self.add_device(InputDevice(device_path))
+                logger.info(f"[i] Manual device: {self.devices[device_path].name}")
             except OSError as err:
                 logger.error(f"[✗] Failed to open device {device_path}: {err}")
                 sys.exit(1)
         else:
-            self.device = self.find_keyboard()
+            self.scan_keyboards()
+            if not self.devices:
+                logger.error("[✗] No keyboard found. Use --list.")
+                sys.exit(1)
 
         self.ui = self.xtest_keyboard()
         if self.ui:
@@ -311,54 +338,47 @@ class LinuxBackend:
         except OSError as err:
             logger.error(f"[✗] Failed to list devices: {err}")
 
-    def find_keyboard(self):
-        """Auto-detect keyboard device from available input devices.
+    def is_keyboard(self, dev):
+        """A device that can type text. MagShift's own virtual keyboard (this or another instance) is excluded:
+        reading it would feed our corrections back in as typing."""
+        if dev.name == self.VIRTUAL_NAME:
+            return False
+        return self.REQUIRED_KEYS.issubset(dev.capabilities().get(self._ecodes.EV_KEY, []))
 
-        Returns:
-            InputDevice object for the detected keyboard
+    def scan_keyboards(self):
+        """Start reading keyboards connected since the last scan (list_devices only returns accessible ones)."""
+        paths = set(self._list_devices())
+        for path in [path for path in self.devices if path not in paths]:
+            self.drop_device(self.devices[path])  # unplugged before its read error arrived
+        self.checked &= paths  # a vanished path may come back as another device
 
-        Raises:
-            SystemExit: If no keyboard is found or device access fails
-        """
-        ecodes = self._ecodes
-        # for correct IDE linting
-        paths = []
-
-        try:
-            paths = self._list_devices()
-        except OSError as err:
-            logger.error(f"[✗] Failed to access input devices: {err}")
-            sys.exit(1)
-
-        possible_candidates = []
-        for path in paths:
+        for path in sorted(paths - self.checked):
+            self.checked.add(path)
             try:
                 dev = self._InputDevice(path)
+                if not self.is_keyboard(dev):
+                    dev.close()
+                    continue
+                self.add_device(dev)
             except OSError:
                 continue
+            logger.info(f"[✓] Keyboard: {dev.name} ({path.split('/')[-1]})")
 
-            name_lower = dev.name.lower()
-            if any(bad in name_lower for bad in self.IGNORED_KEYWORDS):
-                continue
+    def add_device(self, dev):
+        import selectors
+        self.selector.register(dev, selectors.EVENT_READ)
+        self.devices[dev.path] = dev
 
-            caps = dev.capabilities()
-            if ecodes.EV_KEY not in caps:
-                continue
-
-            supported_keys = set(caps[ecodes.EV_KEY])
-            if self.REQUIRED_KEYS.issubset(supported_keys):
-                if 'keyboard' in name_lower or 'kbd' in name_lower:
-                    logger.info(f"[✓] Auto-detected keyboard: {dev.name} ({dev.path.split('/')[-1]})")
-                    return dev
-                possible_candidates.append(dev)
-
-        if possible_candidates:
-            best = possible_candidates[0]
-            logger.info(f"[✓] Auto-detected keyboard (best guess): {best.name} ({best.path.split('/')[-1]})")
-            return best
-
-        logger.error("[✗] No keyboard found. Use --list.")
-        sys.exit(1)
+    def drop_device(self, dev):
+        """Stop reading an unplugged keyboard; its path is checked again on the next scan."""
+        self.selector.unregister(dev)
+        del self.devices[dev.path]
+        self.checked.discard(dev.path)
+        try:
+            dev.close()
+        except OSError:
+            pass
+        logger.info(f"[i] Keyboard disconnected: {dev.name} ({dev.path.split('/')[-1]})")
 
     # --- Output ---
 
@@ -395,6 +415,11 @@ class LinuxBackend:
         Extended modifier list ensures clean state reset for all possible
         modifier keys that might interfere with subsequent operations.
         """
+        # Runs first in every correction: before our first XTEST event the core keyboard still mirrors the
+        # keyboard the user typed on, afterwards it mirrors XTEST
+        if isinstance(self.ui, XTestKeyboard):
+            self.ui.sync_layout()
+
         ecodes = self._ecodes
         modifiers = [
             KEY_LEFTSHIFT, KEY_RIGHTSHIFT,
@@ -447,8 +472,15 @@ class LinuxBackend:
         """Checks physical LED state and forces NumLock ON if currently OFF."""
         ecodes = self._ecodes
         try:
+            # Only a keyboard with a NumLock LED can tell the state: asking another one would always say OFF
+            device = next((dev for dev in self.devices.values()
+                           if ecodes.LED_NUML in dev.capabilities().get(ecodes.EV_LED, [])), None)
+            if device is None:
+                logger.warning("[!] No keyboard with a NumLock LED found.")
+                return
+
             # Active LEDs are returned as a list of integers
-            active_leds = self.device.leds(verbose=False)
+            active_leds = device.leds(verbose=False)
 
             # LED_NUML is the code for NumLock LED
             if ecodes.LED_NUML not in active_leds:
@@ -463,24 +495,36 @@ class LinuxBackend:
     # --- Input ---
 
     def run(self, on_event):
-        """Feed (keycode, value) pairs from the physical keyboard to on_event."""
+        """Feed (keycode, value) pairs from every keyboard to on_event, following hotplug."""
         ecodes = self._ecodes
-
-        # Test device grab capability
-        try:
-            self.device.grab()
-            self.device.ungrab()
-        except Exception:
-            pass
+        next_scan = time.monotonic() + self.RESCAN_INTERVAL
 
         try:
-            for event in self.device.read_loop():
-                if event.type == ecodes.EV_KEY:
-                    on_event(event.code, event.value)
+            while True:
+                for key, _ in self.selector.select(timeout=self.RESCAN_INTERVAL):
+                    dev = key.fileobj
+                    # Read before dispatching: an OSError from on_event (the correction) is not an unplug
+                    try:
+                        events = list(dev.read())
+                    except BlockingIOError:
+                        continue
+                    except OSError:
+                        self.drop_device(dev)
+                        if self.device_path:
+                            logger.error(f"[✗] Device {self.device_path} is gone.")
+                            sys.exit(1)
+                        continue
+                    for event in events:
+                        if event.type == ecodes.EV_KEY:
+                            on_event(event.code, event.value)
+
+                # ponytail: polls for new keyboards (a readdir of /dev/input every few seconds); switch to a
+                # udev monitor if the wakeups ever matter
+                if not self.device_path and time.monotonic() >= next_scan:
+                    self.scan_keyboards()
+                    next_scan = time.monotonic() + self.RESCAN_INTERVAL
         except KeyboardInterrupt:
             sys.stderr.write("\n[✓] Stopped by user.\n")
-        except OSError as err:
-            logger.error(f"[✗] Device error: {err}")
 
 
 # --- macOS: Carbon Text Input Source API (ctypes) ---

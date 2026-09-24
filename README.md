@@ -45,8 +45,9 @@ a simple installer script, and macOS via a LaunchAgent:
 
 ## 🧠 How it works
 
-MagShift listens to the physical keyboard and remembers the last phrase you typed (up to 20 keystrokes, reset after
-1 second of silence, on `Enter`/`Tab`/`Esc`, or when a shortcut like `Ctrl+C` is pressed). On a double `Shift` it:
+MagShift listens to every connected keyboard, including ones plugged in later, and remembers the last phrase you
+typed (up to 20 keystrokes, reset after 1 second of silence, on `Enter`/`Tab`/`Esc`, or when a shortcut like `Ctrl+C`
+is pressed). On a double `Shift` it:
 
 1. sends `Backspace` for every remembered keystroke,
 2. switches the layout (Linux: emulates your system hotkey; macOS: selects the input source directly),
@@ -243,7 +244,7 @@ When no previous layout is known yet it takes the next one in `magshift --list` 
 |---|---|---|
 | `-k, --hotkey STYLE` | Which hotkey your desktop uses to switch layouts, so MagShift can emulate it. `meta` (Meta+Space, default), `alt` (Alt+Shift), `ctrl` (Ctrl+Shift), `caps` (CapsLock), `menu` (Menu key) | Linux |
 | `-p, --pause` | Also correct on a single `Pause` press (Punto Switcher style). Double Shift keeps working. | Linux |
-| `-d, --device PATH` | Read from a specific `/dev/input/event*` device instead of auto-detecting the keyboard | Linux |
+| `-d, --device PATH` | Read only this `/dev/input/event*` device instead of every keyboard | Linux |
 | `--list` | List input devices (Linux) or enabled keyboard layouts (macOS) and exit | both |
 | `-n, --numlock` | Force NumLock ON and exit | Linux |
 | `--auto-numlock` | Force NumLock ON at start, then keep running (used by the NixOS service) | Linux |
